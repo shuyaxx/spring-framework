@@ -1,11 +1,11 @@
 /*
- * Copyright 2002-2017 the original author or authors.
+ * Copyright 2002-2018 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- *      http://www.apache.org/licenses/LICENSE-2.0
+ *      https://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -18,42 +18,61 @@ package org.springframework.test.web.reactive.server;
 
 import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.Collections;
 import java.util.List;
-import java.util.function.UnaryOperator;
 
-import org.springframework.web.server.ServerWebExchange;
+import org.springframework.lang.Nullable;
+import org.springframework.util.CollectionUtils;
 import org.springframework.web.server.WebFilter;
 import org.springframework.web.server.adapter.WebHttpHandlerBuilder;
+import org.springframework.web.server.session.DefaultWebSessionManager;
+import org.springframework.web.server.session.WebSessionManager;
 
 /**
  * Base class for implementations of {@link WebTestClient.MockServerSpec}.
  *
  * @author Rossen Stoyanchev
  * @since 5.0
+ * @param <B> a self reference to the builder type
  */
 abstract class AbstractMockServerSpec<B extends WebTestClient.MockServerSpec<B>>
 		implements WebTestClient.MockServerSpec<B> {
 
-	private final ExchangeMutatingWebFilter exchangeMutatingWebFilter = new ExchangeMutatingWebFilter();
+	@Nullable
+	private List<WebFilter> filters;
 
-	private final List<WebFilter> filters = new ArrayList<>(4);
+	@Nullable
+	private WebSessionManager sessionManager;
+
+	@Nullable
+	private List<MockServerConfigurer> configurers;
 
 
 	AbstractMockServerSpec() {
-		this.filters.add(this.exchangeMutatingWebFilter);
+		// Default instance to be re-used across requests, unless one is configured explicitly
+		this.sessionManager = new DefaultWebSessionManager();
 	}
 
 
 	@Override
-	public <T extends B> T exchangeMutator(UnaryOperator<ServerWebExchange> mutator) {
-		this.exchangeMutatingWebFilter.registerGlobalMutator(mutator);
+	public <T extends B> T webFilter(WebFilter... filters) {
+		if (filters.length > 0) {
+			this.filters = (this.filters != null ? this.filters : new ArrayList<>(4));
+			this.filters.addAll(Arrays.asList(filters));
+		}
 		return self();
 	}
 
 	@Override
-	public <T extends B> T webFilter(WebFilter... filter) {
-		this.filters.addAll(Arrays.asList(filter));
+	public <T extends B> T webSessionManager(WebSessionManager sessionManager) {
+		this.sessionManager = sessionManager;
+		return self();
+	}
+
+	@Override
+	public <T extends B> T apply(MockServerConfigurer configurer) {
+		configurer.afterConfigureAdded(this);
+		this.configurers = (this.configurers != null ? this.configurers : new ArrayList<>(4));
+		this.configurers.add(configurer);
 		return self();
 	}
 
@@ -62,27 +81,26 @@ abstract class AbstractMockServerSpec<B extends WebTestClient.MockServerSpec<B>>
 		return (T) this;
 	}
 
-
 	@Override
 	public WebTestClient.Builder configureClient() {
 		WebHttpHandlerBuilder builder = initHttpHandlerBuilder();
-		filtersInReverse().forEach(builder::prependFilter);
-		return new DefaultWebTestClientBuilder(builder.build(), this.exchangeMutatingWebFilter);
+		if (!CollectionUtils.isEmpty(this.filters)) {
+			builder.filters(theFilters -> theFilters.addAll(0, this.filters));
+		}
+		if (!builder.hasSessionManager() && this.sessionManager != null) {
+			builder.sessionManager(this.sessionManager);
+		}
+		if (!CollectionUtils.isEmpty(this.configurers)) {
+			this.configurers.forEach(configurer -> configurer.beforeServerCreated(builder));
+		}
+		return new DefaultWebTestClientBuilder(builder);
 	}
 
 	/**
-	 * Sub-classes to create the {@code WebHttpHandlerBuilder} to use.
+	 * Sub-classes must create an {@code WebHttpHandlerBuilder} that will then
+	 * be used to create the HttpHandler for the mock server.
 	 */
 	protected abstract WebHttpHandlerBuilder initHttpHandlerBuilder();
-
-	/**
-	 * Return the filters in reverse order for pre-pending.
-	 */
-	private List<WebFilter> filtersInReverse() {
-		List<WebFilter> result = new ArrayList<>(this.filters);
-		Collections.reverse(result);
-		return result;
-	}
 
 	@Override
 	public WebTestClient build() {

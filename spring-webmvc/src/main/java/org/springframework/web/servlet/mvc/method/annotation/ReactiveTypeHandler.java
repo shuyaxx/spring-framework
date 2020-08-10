@@ -1,11 +1,11 @@
 /*
- * Copyright 2002-2017 the original author or authors.
+ * Copyright 2002-2020 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- *      http://www.apache.org/licenses/LICENSE-2.0
+ *      https://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -13,10 +13,13 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+
 package org.springframework.web.servlet.mvc.method.annotation;
 
 import java.io.IOException;
+import java.time.Duration;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
@@ -33,11 +36,13 @@ import org.springframework.core.MethodParameter;
 import org.springframework.core.ReactiveAdapter;
 import org.springframework.core.ReactiveAdapterRegistry;
 import org.springframework.core.ResolvableType;
+import org.springframework.core.task.SimpleAsyncTaskExecutor;
 import org.springframework.core.task.SyncTaskExecutor;
 import org.springframework.core.task.TaskExecutor;
 import org.springframework.http.MediaType;
 import org.springframework.http.codec.ServerSentEvent;
 import org.springframework.http.server.ServerHttpResponse;
+import org.springframework.lang.Nullable;
 import org.springframework.util.Assert;
 import org.springframework.util.CollectionUtils;
 import org.springframework.util.MimeType;
@@ -49,7 +54,6 @@ import org.springframework.web.context.request.async.DeferredResult;
 import org.springframework.web.context.request.async.WebAsyncUtils;
 import org.springframework.web.method.support.ModelAndViewContainer;
 import org.springframework.web.servlet.HandlerMapping;
-
 
 /**
  * Private helper class to assist with handling "reactive" return values types
@@ -68,31 +72,38 @@ import org.springframework.web.servlet.HandlerMapping;
  */
 class ReactiveTypeHandler {
 
-	private static Log logger = LogFactory.getLog(ReactiveTypeHandler.class);
+	private static final long STREAMING_TIMEOUT_VALUE = -1;
 
-	private static final MediaType JSON_TYPE = new MediaType("application", "*+json");
+	@SuppressWarnings("deprecation")
+	private static final List<MediaType> JSON_STREAMING_MEDIA_TYPES =
+			Arrays.asList(MediaType.APPLICATION_NDJSON, MediaType.APPLICATION_STREAM_JSON);
+
+	private static final Log logger = LogFactory.getLog(ReactiveTypeHandler.class);
 
 
-	private final ReactiveAdapterRegistry reactiveRegistry;
+	private final ReactiveAdapterRegistry adapterRegistry;
 
 	private final TaskExecutor taskExecutor;
 
 	private final ContentNegotiationManager contentNegotiationManager;
 
+	private boolean taskExecutorWarning;
+
 
 	public ReactiveTypeHandler() {
-		this(new ReactiveAdapterRegistry(), new SyncTaskExecutor(), new ContentNegotiationManager());
+		this(ReactiveAdapterRegistry.getSharedInstance(), new SyncTaskExecutor(), new ContentNegotiationManager());
 	}
 
-	ReactiveTypeHandler(ReactiveAdapterRegistry registry, TaskExecutor executor,
-			ContentNegotiationManager manager) {
-
+	ReactiveTypeHandler(ReactiveAdapterRegistry registry, TaskExecutor executor, ContentNegotiationManager manager) {
 		Assert.notNull(registry, "ReactiveAdapterRegistry is required");
 		Assert.notNull(executor, "TaskExecutor is required");
 		Assert.notNull(manager, "ContentNegotiationManager is required");
-		this.reactiveRegistry = registry;
+		this.adapterRegistry = registry;
 		this.taskExecutor = executor;
 		this.contentNegotiationManager = manager;
+
+		this.taskExecutorWarning =
+				(executor instanceof SimpleAsyncTaskExecutor || executor instanceof SyncTaskExecutor);
 	}
 
 
@@ -100,26 +111,26 @@ class ReactiveTypeHandler {
 	 * Whether the type can be adapted to a Reactive Streams {@link Publisher}.
 	 */
 	public boolean isReactiveType(Class<?> type) {
-		return this.reactiveRegistry.hasAdapters() && this.reactiveRegistry.getAdapter(type) != null;
+		return (this.adapterRegistry.getAdapter(type) != null);
 	}
 
 
 	/**
 	 * Process the given reactive return value and decide whether to adapt it
 	 * to a {@link ResponseBodyEmitter} or a {@link DeferredResult}.
-	 *
-	 * @return an emitter for streaming or {@code null} if handled internally
-	 * with a {@link DeferredResult}.
+	 * @return an emitter for streaming, or {@code null} if handled internally
+	 * with a {@link DeferredResult}
 	 */
+	@Nullable
 	public ResponseBodyEmitter handleValue(Object returnValue, MethodParameter returnType,
 			ModelAndViewContainer mav, NativeWebRequest request) throws Exception {
 
 		Assert.notNull(returnValue, "Expected return value");
-		ReactiveAdapter adapter = this.reactiveRegistry.getAdapter(returnValue.getClass());
-		Assert.state(adapter != null, "Unexpected return value: " + returnValue);
+		ReactiveAdapter adapter = this.adapterRegistry.getAdapter(returnValue.getClass());
+		Assert.state(adapter != null, () -> "Unexpected return value: " + returnValue);
 
-		ResolvableType elementType = ResolvableType.forMethodParameter(returnType).getGeneric(0);
-		Class<?> elementClass = elementType.resolve(Object.class);
+		ResolvableType elementType = ResolvableType.forMethodParameter(returnType).getGeneric();
+		Class<?> elementClass = elementType.toClass();
 
 		Collection<MediaType> mediaTypes = getMediaTypes(request);
 		Optional<MediaType> mediaType = mediaTypes.stream().filter(MimeType::isConcrete).findFirst();
@@ -127,19 +138,26 @@ class ReactiveTypeHandler {
 		if (adapter.isMultiValue()) {
 			if (mediaTypes.stream().anyMatch(MediaType.TEXT_EVENT_STREAM::includes) ||
 					ServerSentEvent.class.isAssignableFrom(elementClass)) {
-				SseEmitter emitter = new SseEmitter();
+				logExecutorWarning(returnType);
+				SseEmitter emitter = new SseEmitter(STREAMING_TIMEOUT_VALUE);
 				new SseEmitterSubscriber(emitter, this.taskExecutor).connect(adapter, returnValue);
 				return emitter;
 			}
 			if (CharSequence.class.isAssignableFrom(elementClass)) {
+				logExecutorWarning(returnType);
 				ResponseBodyEmitter emitter = getEmitter(mediaType.orElse(MediaType.TEXT_PLAIN));
 				new TextEmitterSubscriber(emitter, this.taskExecutor).connect(adapter, returnValue);
 				return emitter;
 			}
-			if (mediaTypes.stream().anyMatch(MediaType.APPLICATION_STREAM_JSON::includes)) {
-				ResponseBodyEmitter emitter = getEmitter(MediaType.APPLICATION_STREAM_JSON);
-				new JsonEmitterSubscriber(emitter, this.taskExecutor).connect(adapter, returnValue);
-				return emitter;
+			for (MediaType type : mediaTypes) {
+				for (MediaType streamingType : JSON_STREAMING_MEDIA_TYPES) {
+					if (streamingType.includes(type)) {
+						logExecutorWarning(returnType);
+						ResponseBodyEmitter emitter = getEmitter(streamingType);
+						new JsonEmitterSubscriber(emitter, this.taskExecutor).connect(adapter, returnValue);
+						return emitter;
+					}
+				}
 			}
 		}
 
@@ -163,8 +181,7 @@ class ReactiveTypeHandler {
 	}
 
 	private ResponseBodyEmitter getEmitter(MediaType mediaType) {
-		return new ResponseBodyEmitter() {
-
+		return new ResponseBodyEmitter(STREAMING_TIMEOUT_VALUE) {
 			@Override
 			protected void extendResponse(ServerHttpResponse outputMessage) {
 				outputMessage.getHeaders().setContentType(mediaType);
@@ -172,17 +189,40 @@ class ReactiveTypeHandler {
 		};
 	}
 
+	@SuppressWarnings("ConstantConditions")
+	private void logExecutorWarning(MethodParameter returnType) {
+		if (this.taskExecutorWarning && logger.isWarnEnabled()) {
+			synchronized (this) {
+				if (this.taskExecutorWarning) {
+					String executorTypeName = this.taskExecutor.getClass().getSimpleName();
+					logger.warn("\n!!!\n" +
+							"Streaming through a reactive type requires an Executor to write to the response.\n" +
+							"Please, configure a TaskExecutor in the MVC config under \"async support\".\n" +
+							"The " + executorTypeName + " currently in use is not suitable under load.\n" +
+							"-------------------------------\n" +
+							"Controller:\t" + returnType.getContainingClass().getName() + "\n" +
+							"Method:\t\t" + returnType.getMethod().getName() + "\n" +
+							"Returning:\t" + ResolvableType.forMethodParameter(returnType).toString() + "\n" +
+							"!!!");
+					this.taskExecutorWarning = false;
+				}
+			}
+		}
+	}
 
-	private static abstract class AbstractEmitterSubscriber implements Subscriber<Object>, Runnable {
+
+	private abstract static class AbstractEmitterSubscriber implements Subscriber<Object>, Runnable {
 
 		private final ResponseBodyEmitter emitter;
 
 		private final TaskExecutor taskExecutor;
 
+		@Nullable
 		private Subscription subscription;
 
 		private final AtomicReference<Object> elementRef = new AtomicReference<>();
 
+		@Nullable
 		private Throwable error;
 
 		private volatile boolean terminated;
@@ -191,37 +231,31 @@ class ReactiveTypeHandler {
 
 		private volatile boolean done;
 
-
 		protected AbstractEmitterSubscriber(ResponseBodyEmitter emitter, TaskExecutor executor) {
 			this.emitter = emitter;
 			this.taskExecutor = executor;
 		}
-
 
 		public void connect(ReactiveAdapter adapter, Object returnValue) {
 			Publisher<Object> publisher = adapter.toPublisher(returnValue);
 			publisher.subscribe(this);
 		}
 
-
 		protected ResponseBodyEmitter getEmitter() {
 			return this.emitter;
 		}
 
-
 		@Override
 		public final void onSubscribe(Subscription subscription) {
 			this.subscription = subscription;
-			if (logger.isDebugEnabled()) {
-				logger.debug("Subscribed to Publisher for " + this.emitter);
-			}
 			this.emitter.onTimeout(() -> {
-				if (logger.isDebugEnabled()) {
-					logger.debug("Connection timed out for " + this.emitter);
+				if (logger.isTraceEnabled()) {
+					logger.trace("Connection timeout for " + this.emitter);
 				}
 				terminate();
 				this.emitter.complete();
 			});
+			this.emitter.onError(this.emitter::completeWithError);
 			subscription.request(1);
 		}
 
@@ -249,7 +283,7 @@ class ReactiveTypeHandler {
 				schedule();
 			}
 		}
-		
+
 		private void schedule() {
 			try {
 				this.taskExecutor.execute(this);
@@ -264,7 +298,7 @@ class ReactiveTypeHandler {
 				}
 			}
 		}
-		
+
 		@Override
 		public void run() {
 			if (this.done) {
@@ -278,38 +312,39 @@ class ReactiveTypeHandler {
 			Object element = this.elementRef.get();
 			if (element != null) {
 				this.elementRef.lazySet(null);
+				Assert.state(this.subscription != null, "No subscription");
 				try {
 					send(element);
 					this.subscription.request(1);
 				}
 				catch (final Throwable ex) {
-					if (logger.isDebugEnabled()) {
-						logger.debug("Send error for " + this.emitter, ex);
+					if (logger.isTraceEnabled()) {
+						logger.trace("Send for " + this.emitter + " failed: " + ex);
 					}
 					terminate();
 					return;
 				}
 			}
-			
+
 			if (isTerminated) {
 				this.done = true;
 				Throwable ex = this.error;
 				this.error = null;
 				if (ex != null) {
-					if (logger.isDebugEnabled()) {
-						logger.debug("Publisher error for " + this.emitter, ex);
+					if (logger.isTraceEnabled()) {
+						logger.trace("Publisher for " + this.emitter + " failed: " + ex);
 					}
 					this.emitter.completeWithError(ex);
 				}
 				else {
-					if (logger.isDebugEnabled()) {
-						logger.debug("Publishing completed for " + this.emitter);
+					if (logger.isTraceEnabled()) {
+						logger.trace("Publisher for " + this.emitter + " completed");
 					}
 					this.emitter.complete();
 				}
 				return;
 			}
-			
+
 			if (this.executing.decrementAndGet() != 0) {
 				schedule();
 			}
@@ -319,9 +354,10 @@ class ReactiveTypeHandler {
 
 		private void terminate() {
 			this.done = true;
-			this.subscription.cancel();
+			if (this.subscription != null) {
+				this.subscription.cancel();
+			}
 		}
-
 	}
 
 
@@ -342,12 +378,28 @@ class ReactiveTypeHandler {
 			}
 		}
 
-		private SseEmitter.SseEventBuilder adapt(ServerSentEvent<?> event) {
+		private SseEmitter.SseEventBuilder adapt(ServerSentEvent<?> sse) {
 			SseEmitter.SseEventBuilder builder = SseEmitter.event();
-			event.id().ifPresent(builder::id);
-			event.comment().ifPresent(builder::comment);
-			event.data().ifPresent(builder::data);
-			event.retry().ifPresent(duration -> builder.reconnectTime(duration.toMillis()));
+			String id = sse.id();
+			String event = sse.event();
+			Duration retry = sse.retry();
+			String comment = sse.comment();
+			Object data = sse.data();
+			if (id != null) {
+				builder.id(id);
+			}
+			if (event != null) {
+				builder.name(event);
+			}
+			if (data != null) {
+				builder.data(data);
+			}
+			if (retry != null) {
+				builder.reconnectTime(retry.toMillis());
+			}
+			if (comment != null) {
+				builder.comment(comment);
+			}
 			return builder;
 		}
 	}
@@ -388,15 +440,11 @@ class ReactiveTypeHandler {
 
 		private final CollectedValuesList values;
 
-
-		DeferredResultSubscriber(DeferredResult<Object> result, ReactiveAdapter adapter,
-				ResolvableType elementType) {
-
+		DeferredResultSubscriber(DeferredResult<Object> result, ReactiveAdapter adapter, ResolvableType elementType) {
 			this.result = result;
 			this.multiValueSource = adapter.isMultiValue();
 			this.values = new CollectedValuesList(elementType);
 		}
-
 
 		public void connect(ReactiveAdapter adapter, Object returnValue) {
 			Publisher<Object> publisher = adapter.toPublisher(returnValue);
@@ -433,6 +481,10 @@ class ReactiveTypeHandler {
 		}
 	}
 
+
+	/**
+	 * List of collect values where all elements are a specified type.
+	 */
 	@SuppressWarnings("serial")
 	static class CollectedValuesList extends ArrayList<Object> {
 

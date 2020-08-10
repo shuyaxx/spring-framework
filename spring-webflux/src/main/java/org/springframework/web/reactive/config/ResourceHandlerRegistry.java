@@ -1,11 +1,11 @@
 /*
- * Copyright 2002-2016 the original author or authors.
+ * Copyright 2002-2018 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- *      http://www.apache.org/licenses/LICENSE-2.0
+ *      https://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -23,11 +23,13 @@ import java.util.List;
 import java.util.Map;
 
 import org.springframework.beans.factory.BeanInitializationException;
-import org.springframework.context.ApplicationContext;
-import org.springframework.util.Assert;
-import org.springframework.web.reactive.accept.CompositeContentTypeResolver;
-import org.springframework.web.reactive.handler.AbstractHandlerMapping;
+import org.springframework.core.Ordered;
+import org.springframework.core.io.ResourceLoader;
+import org.springframework.lang.Nullable;
+import org.springframework.web.reactive.handler.AbstractUrlHandlerMapping;
 import org.springframework.web.reactive.handler.SimpleUrlHandlerMapping;
+import org.springframework.web.reactive.resource.ResourceTransformerSupport;
+import org.springframework.web.reactive.resource.ResourceUrlProvider;
 import org.springframework.web.reactive.resource.ResourceWebHandler;
 import org.springframework.web.server.WebHandler;
 
@@ -49,55 +51,54 @@ import org.springframework.web.server.WebHandler;
  * period for served resources.
  *
  * @author Rossen Stoyanchev
+ * @author Brian Clozel
  * @since 5.0
  */
 public class ResourceHandlerRegistry {
 
-	private final ApplicationContext applicationContext;
-
-	private final CompositeContentTypeResolver contentTypeResolver;
+	private final ResourceLoader resourceLoader;
 
 	private final List<ResourceHandlerRegistration> registrations = new ArrayList<>();
 
-	private int order = Integer.MAX_VALUE -1;
+	private int order = Ordered.LOWEST_PRECEDENCE - 1;
+
+	@Nullable
+	private ResourceUrlProvider resourceUrlProvider;
 
 
 	/**
-	 * Create a new resource handler registry for the given application context.
-	 * @param applicationContext the Spring application context
+	 * Create a new resource handler registry for the given resource loader
+	 * (typically an application context).
+	 * @param resourceLoader the resource loader to use
 	 */
-	public ResourceHandlerRegistry(ApplicationContext applicationContext) {
-		this(applicationContext, null);
+	public ResourceHandlerRegistry(ResourceLoader resourceLoader) {
+		this.resourceLoader = resourceLoader;
 	}
 
 	/**
-	 * Create a new resource handler registry for the given application context.
-	 * @param applicationContext the Spring application context
-	 * @param contentTypeResolver the content type resolver to use
+	 * Configure the {@link ResourceUrlProvider} that can be used by
+	 * {@link org.springframework.web.reactive.resource.ResourceTransformer} instances.
+	 * @param resourceUrlProvider the resource URL provider to use
+	 * @since 5.0.11
 	 */
-	public ResourceHandlerRegistry(ApplicationContext applicationContext,
-			CompositeContentTypeResolver contentTypeResolver) {
-
-		Assert.notNull(applicationContext, "ApplicationContext is required");
-		this.applicationContext = applicationContext;
-		this.contentTypeResolver = contentTypeResolver;
+	public void setResourceUrlProvider(@Nullable ResourceUrlProvider resourceUrlProvider) {
+		this.resourceUrlProvider = resourceUrlProvider;
 	}
+
 
 
 	/**
 	 * Add a resource handler for serving static resources based on the specified
 	 * URL path patterns. The handler will be invoked for every incoming request
 	 * that matches to one of the specified path patterns.
-	 *
 	 * <p>Patterns like {@code "/static/**"} or {@code "/css/{filename:\\w+\\.css}"}
-	 * are allowed. See {@link org.springframework.web.util.ParsingPathMatcher} for more
-	 * details on the syntax.
-	 * @return A {@link ResourceHandlerRegistration} to use to further
-	 * configure the registered resource handler
+	 * are allowed. See {@link org.springframework.web.util.pattern.PathPattern}
+	 * for more details on the syntax.
+	 * @return a {@link ResourceHandlerRegistration} to use to further configure
+	 * the registered resource handler
 	 */
 	public ResourceHandlerRegistration addResourceHandler(String... patterns) {
-		ResourceHandlerRegistration registration =
-				new ResourceHandlerRegistration(this.applicationContext, patterns);
+		ResourceHandlerRegistration registration = new ResourceHandlerRegistration(this.resourceLoader, patterns);
 		this.registrations.add(registration);
 		return registration;
 	}
@@ -128,31 +129,30 @@ public class ResourceHandlerRegistry {
 	 * Return a handler mapping with the mapped resource handlers; or {@code null} in case
 	 * of no registrations.
 	 */
-	protected AbstractHandlerMapping getHandlerMapping() {
+	@Nullable
+	protected AbstractUrlHandlerMapping getHandlerMapping() {
 		if (this.registrations.isEmpty()) {
 			return null;
 		}
-
 		Map<String, WebHandler> urlMap = new LinkedHashMap<>();
 		for (ResourceHandlerRegistration registration : this.registrations) {
 			for (String pathPattern : registration.getPathPatterns()) {
 				ResourceWebHandler handler = registration.getRequestHandler();
-				handler.setContentTypeResolver(this.contentTypeResolver);
+				handler.getResourceTransformers().forEach(transformer -> {
+					if (transformer instanceof ResourceTransformerSupport) {
+						((ResourceTransformerSupport) transformer).setResourceUrlProvider(this.resourceUrlProvider);
+					}
+				});
 				try {
 					handler.afterPropertiesSet();
-					handler.afterSingletonsInstantiated();
 				}
-				catch (Exception ex) {
+				catch (Throwable ex) {
 					throw new BeanInitializationException("Failed to init ResourceHttpRequestHandler", ex);
 				}
 				urlMap.put(pathPattern, handler);
 			}
 		}
-
-		SimpleUrlHandlerMapping handlerMapping = new SimpleUrlHandlerMapping();
-		handlerMapping.setOrder(this.order);
-		handlerMapping.setUrlMap(urlMap);
-		return handlerMapping;
+		return new SimpleUrlHandlerMapping(urlMap, this.order);
 	}
 
 }

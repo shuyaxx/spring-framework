@@ -1,11 +1,11 @@
 /*
- * Copyright 2002-2017 the original author or authors.
+ * Copyright 2002-2018 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- *      http://www.apache.org/licenses/LICENSE-2.0
+ *      https://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -28,6 +28,7 @@ import org.springframework.beans.factory.config.BeanExpressionResolver;
 import org.springframework.beans.factory.config.ConfigurableBeanFactory;
 import org.springframework.core.MethodParameter;
 import org.springframework.core.ReactiveAdapterRegistry;
+import org.springframework.lang.Nullable;
 import org.springframework.ui.Model;
 import org.springframework.web.bind.WebDataBinder;
 import org.springframework.web.bind.annotation.ValueConstants;
@@ -59,20 +60,25 @@ import org.springframework.web.server.ServerWebInputException;
  */
 public abstract class AbstractNamedValueArgumentResolver extends HandlerMethodArgumentResolverSupport {
 
+	@Nullable
 	private final ConfigurableBeanFactory configurableBeanFactory;
 
+	@Nullable
 	private final BeanExpressionContext expressionContext;
 
 	private final Map<MethodParameter, NamedValueInfo> namedValueInfoCache = new ConcurrentHashMap<>(256);
 
 
 	/**
-	 * @param factory a bean factory to use for resolving ${...} placeholder
-	 * and #{...} SpEL expressions in default values, or {@code null} if default
+	 * Create a new {@link AbstractNamedValueArgumentResolver} instance.
+	 * @param factory a bean factory to use for resolving {@code ${...}} placeholder
+	 * and {@code #{...}} SpEL expressions in default values, or {@code null} if default
 	 * values are not expected to contain expressions
 	 * @param registry for checking reactive type wrappers
 	 */
-	public AbstractNamedValueArgumentResolver(ConfigurableBeanFactory factory, ReactiveAdapterRegistry registry) {
+	public AbstractNamedValueArgumentResolver(@Nullable ConfigurableBeanFactory factory,
+			ReactiveAdapterRegistry registry) {
+
 		super(registry);
 		this.configurableBeanFactory = factory;
 		this.expressionContext = (factory != null ? new BeanExpressionContext(factory, null) : null);
@@ -95,13 +101,13 @@ public abstract class AbstractNamedValueArgumentResolver extends HandlerMethodAr
 		Model model = bindingContext.getModel();
 
 		return resolveName(resolvedName.toString(), nestedParameter, exchange)
-				.map(arg -> {
+				.flatMap(arg -> {
 					if ("".equals(arg) && namedValueInfo.defaultValue != null) {
 						arg = resolveStringValue(namedValueInfo.defaultValue);
 					}
 					arg = applyConversion(arg, namedValueInfo, parameter, bindingContext, exchange);
 					handleResolvedValue(arg, namedValueInfo.name, parameter, model, exchange);
-					return arg;
+					return Mono.justOrEmpty(arg);
 				})
 				.switchIfEmpty(getDefaultValue(
 						namedValueInfo, parameter, bindingContext, model, exchange));
@@ -151,8 +157,9 @@ public abstract class AbstractNamedValueArgumentResolver extends HandlerMethodAr
 	 * Resolve the given annotation-specified value,
 	 * potentially containing placeholders and expressions.
 	 */
+	@Nullable
 	private Object resolveStringValue(String value) {
-		if (this.configurableBeanFactory == null) {
+		if (this.configurableBeanFactory == null || this.expressionContext == null) {
 			return value;
 		}
 		String placeholdersResolved = this.configurableBeanFactory.resolveEmbeddedValue(value);
@@ -169,14 +176,15 @@ public abstract class AbstractNamedValueArgumentResolver extends HandlerMethodAr
 	 * @param parameter the method parameter to resolve to an argument value
 	 * (pre-nested in case of a {@link java.util.Optional} declaration)
 	 * @param exchange the current exchange
-	 * @return the resolved argument (may be {@code null})
+	 * @return the resolved argument (may be empty {@link Mono})
 	 */
 	protected abstract Mono<Object> resolveName(String name, MethodParameter parameter, ServerWebExchange exchange);
 
 	/**
 	 * Apply type conversion if necessary.
 	 */
-	private Object applyConversion(Object value, NamedValueInfo namedValueInfo, MethodParameter parameter,
+	@Nullable
+	private Object applyConversion(@Nullable Object value, NamedValueInfo namedValueInfo, MethodParameter parameter,
 			BindingContext bindingContext, ServerWebExchange exchange) {
 
 		WebDataBinder binder = bindingContext.createDataBinder(exchange, namedValueInfo.name);
@@ -198,8 +206,8 @@ public abstract class AbstractNamedValueArgumentResolver extends HandlerMethodAr
 	private Mono<Object> getDefaultValue(NamedValueInfo namedValueInfo, MethodParameter parameter,
 			BindingContext bindingContext, Model model, ServerWebExchange exchange) {
 
-		Object value = null;
-		try {
+		return Mono.fromSupplier(() -> {
+			Object value = null;
 			if (namedValueInfo.defaultValue != null) {
 				value = resolveStringValue(namedValueInfo.defaultValue);
 			}
@@ -209,11 +217,8 @@ public abstract class AbstractNamedValueArgumentResolver extends HandlerMethodAr
 			value = handleNullValue(namedValueInfo.name, value, parameter.getNestedParameterType());
 			value = applyConversion(value, namedValueInfo, parameter, bindingContext, exchange);
 			handleResolvedValue(value, namedValueInfo.name, parameter, model, exchange);
-			return Mono.justOrEmpty(value);
-		}
-		catch (Throwable ex) {
-			return Mono.error(ex);
-		}
+			return value;
+		});
 	}
 
 	/**
@@ -248,7 +253,8 @@ public abstract class AbstractNamedValueArgumentResolver extends HandlerMethodAr
 	 * A {@code null} results in a {@code false} value for {@code boolean}s or
 	 * an exception for other primitives.
 	 */
-	private Object handleNullValue(String name, Object value, Class<?> paramType) {
+	@Nullable
+	private Object handleNullValue(String name, @Nullable Object value, Class<?> paramType) {
 		if (value == null) {
 			if (Boolean.TYPE.equals(paramType)) {
 				return Boolean.FALSE;
@@ -273,7 +279,7 @@ public abstract class AbstractNamedValueArgumentResolver extends HandlerMethodAr
 	 */
 	@SuppressWarnings("UnusedParameters")
 	protected void handleResolvedValue(
-			Object arg, String name, MethodParameter parameter, Model model, ServerWebExchange exchange) {
+			@Nullable Object arg, String name, MethodParameter parameter, Model model, ServerWebExchange exchange) {
 	}
 
 
@@ -287,9 +293,10 @@ public abstract class AbstractNamedValueArgumentResolver extends HandlerMethodAr
 
 		private final boolean required;
 
+		@Nullable
 		private final String defaultValue;
 
-		public NamedValueInfo(String name, boolean required, String defaultValue) {
+		public NamedValueInfo(String name, boolean required, @Nullable String defaultValue) {
 			this.name = name;
 			this.required = required;
 			this.defaultValue = defaultValue;

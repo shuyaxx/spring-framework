@@ -1,11 +1,11 @@
 /*
- * Copyright 2002-2017 the original author or authors.
+ * Copyright 2002-2018 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- *      http://www.apache.org/licenses/LICENSE-2.0
+ *      https://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -18,11 +18,14 @@ package org.springframework.http.converter.json;
 
 import java.io.Reader;
 import java.io.Writer;
+import java.lang.reflect.ParameterizedType;
 import java.lang.reflect.Type;
+
 import javax.json.bind.Jsonb;
 import javax.json.bind.JsonbBuilder;
 import javax.json.bind.JsonbConfig;
 
+import org.springframework.lang.Nullable;
 import org.springframework.util.Assert;
 
 /**
@@ -57,7 +60,7 @@ public class JsonbHttpMessageConverter extends AbstractJsonHttpMessageConverter 
 	 * @param config the {@code JsonbConfig} for the underlying delegate
 	 */
 	public JsonbHttpMessageConverter(JsonbConfig config) {
-		this(JsonbBuilder.create(config));
+		this.jsonb = JsonbBuilder.create(config);
 	}
 
 	/**
@@ -65,7 +68,8 @@ public class JsonbHttpMessageConverter extends AbstractJsonHttpMessageConverter 
 	 * @param jsonb the Jsonb instance to use
 	 */
 	public JsonbHttpMessageConverter(Jsonb jsonb) {
-		setJsonb(jsonb);
+		Assert.notNull(jsonb, "A Jsonb instance is required");
+		this.jsonb = jsonb;
 	}
 
 
@@ -97,8 +101,8 @@ public class JsonbHttpMessageConverter extends AbstractJsonHttpMessageConverter 
 	}
 
 	@Override
-	protected void writeInternal(Object o, Type type, Writer writer) throws Exception {
-		if (type != null) {
+	protected void writeInternal(Object o, @Nullable Type type, Writer writer) throws Exception {
+		if (type instanceof ParameterizedType) {
 			getJsonb().toJson(o, type, writer);
 		}
 		else {

@@ -5,7 +5,7 @@
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- *      http://www.apache.org/licenses/LICENSE-2.0
+ *      https://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -15,6 +15,8 @@
  */
 
 package org.springframework.context;
+
+import org.springframework.lang.Nullable;
 
 /**
  * Interface for objects that are suitable for message resolution in a
@@ -35,6 +37,7 @@ public interface MessageSourceResolvable {
 	 * they should get tried. The last code will therefore be the default one.
 	 * @return a String array of codes which are associated with this message
 	 */
+	@Nullable
 	String[] getCodes();
 
 	/**
@@ -44,6 +47,7 @@ public interface MessageSourceResolvable {
 	 * placeholders within the message text
 	 * @see java.text.MessageFormat
 	 */
+	@Nullable
 	default Object[] getArguments() {
 		return null;
 	}
@@ -57,6 +61,7 @@ public interface MessageSourceResolvable {
 	 * for this particular message.
 	 * @return the default message, or {@code null} if no default
 	 */
+	@Nullable
 	default String getDefaultMessage() {
 		return null;
 	}

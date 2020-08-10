@@ -1,11 +1,11 @@
 /*
- * Copyright 2002-2017 the original author or authors.
+ * Copyright 2002-2020 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- *      http://www.apache.org/licenses/LICENSE-2.0
+ *      https://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -16,46 +16,38 @@
 
 package org.springframework.http.codec.json;
 
-import java.io.IOException;
-import java.lang.annotation.Annotation;
-import java.util.List;
+import java.nio.charset.Charset;
+import java.nio.charset.StandardCharsets;
+import java.util.Arrays;
 import java.util.Map;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.JavaType;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.databind.ObjectReader;
-import com.fasterxml.jackson.databind.exc.InvalidDefinitionException;
 import org.reactivestreams.Publisher;
 import reactor.core.publisher.Flux;
-import reactor.core.publisher.Mono;
 
-import org.springframework.core.MethodParameter;
 import org.springframework.core.ResolvableType;
-import org.springframework.core.codec.CodecException;
-import org.springframework.core.codec.DecodingException;
+import org.springframework.core.codec.StringDecoder;
 import org.springframework.core.io.buffer.DataBuffer;
-import org.springframework.core.io.buffer.DataBufferUtils;
-import org.springframework.http.codec.HttpMessageDecoder;
+import org.springframework.core.io.buffer.DefaultDataBufferFactory;
 import org.springframework.http.converter.json.Jackson2ObjectMapperBuilder;
-import org.springframework.http.server.reactive.ServerHttpRequest;
-import org.springframework.http.server.reactive.ServerHttpResponse;
-import org.springframework.util.Assert;
+import org.springframework.lang.Nullable;
 import org.springframework.util.MimeType;
+import org.springframework.util.MimeTypeUtils;
 
 /**
- * Decode a byte stream into JSON and convert to Object's with Jackson 2.9.
+ * Decode a byte stream into JSON and convert to Object's with Jackson 2.9,
+ * leveraging non-blocking parsing.
  *
  * @author Sebastien Deleuze
  * @author Rossen Stoyanchev
  * @since 5.0
  * @see Jackson2JsonEncoder
  */
-public class Jackson2JsonDecoder extends Jackson2CodecSupport implements HttpMessageDecoder<Object> {
+public class Jackson2JsonDecoder extends AbstractJackson2Decoder {
 
-	private final JsonObjectDecoder fluxDecoder = new JsonObjectDecoder(true);
+	private static final StringDecoder STRING_DECODER = StringDecoder.textPlainOnly(Arrays.asList(",", "\n"), false);
 
-	private final JsonObjectDecoder monoDecoder = new JsonObjectDecoder(false);
+	private static final ResolvableType STRING_TYPE = ResolvableType.forClass(String.class);
 
 
 	public Jackson2JsonDecoder() {
@@ -66,81 +58,27 @@ public class Jackson2JsonDecoder extends Jackson2CodecSupport implements HttpMes
 		super(mapper, mimeTypes);
 	}
 
-
 	@Override
-	public boolean canDecode(ResolvableType elementType, MimeType mimeType) {
-		JavaType javaType = this.objectMapper.getTypeFactory().constructType(elementType.getType());
-		// Skip String: CharSequenceDecoder + "*/*" comes after
-		return (!CharSequence.class.isAssignableFrom(elementType.resolve(Object.class)) &&
-				this.objectMapper.canDeserialize(javaType) && supportsMimeType(mimeType));
-	}
+	protected Flux<DataBuffer> processInput(Publisher<DataBuffer> input, ResolvableType elementType,
+			@Nullable MimeType mimeType, @Nullable Map<String, Object> hints) {
 
+		Flux<DataBuffer> flux = Flux.from(input);
+		if (mimeType == null) {
+			return flux;
+		}
 
-	@Override
-	public List<MimeType> getDecodableMimeTypes() {
-		return JSON_MIME_TYPES;
-	}
+		// Jackson asynchronous parser only supports UTF-8
+		Charset charset = mimeType.getCharset();
+		if (charset == null || StandardCharsets.UTF_8.equals(charset) || StandardCharsets.US_ASCII.equals(charset)) {
+			return flux;
+		}
 
-	@Override
-	public Flux<Object> decode(Publisher<DataBuffer> input, ResolvableType elementType,
-			MimeType mimeType, Map<String, Object> hints) {
+		// Potentially, the memory consumption of this conversion could be improved by using CharBuffers instead
+		// of allocating Strings, but that would require refactoring the buffer tokenization code from StringDecoder
 
-		return decodeInternal(this.fluxDecoder, input, elementType, mimeType, hints);
-	}
-
-	@Override
-	public Mono<Object> decodeToMono(Publisher<DataBuffer> input, ResolvableType elementType,
-			MimeType mimeType, Map<String, Object> hints) {
-
-		return decodeInternal(this.monoDecoder, input, elementType, mimeType, hints).singleOrEmpty();
-	}
-
-	private Flux<Object> decodeInternal(JsonObjectDecoder objectDecoder, Publisher<DataBuffer> inputStream,
-			ResolvableType elementType, MimeType mimeType, Map<String, Object> hints) {
-
-		Assert.notNull(inputStream, "'inputStream' must not be null");
-		Assert.notNull(elementType, "'elementType' must not be null");
-
-		Class<?> contextClass = getParameter(elementType).map(MethodParameter::getContainingClass).orElse(null);
-		JavaType javaType = getJavaType(elementType.getType(), contextClass);
-		Class<?> jsonView = (Class<?>) hints.get(Jackson2CodecSupport.JSON_VIEW_HINT);
-
-		ObjectReader reader = (jsonView != null ?
-				this.objectMapper.readerWithView(jsonView).forType(javaType) :
-				this.objectMapper.readerFor(javaType));
-
-		return objectDecoder.decode(inputStream, elementType, mimeType, hints)
-				.map(dataBuffer -> {
-					try {
-						Object value = reader.readValue(dataBuffer.asInputStream());
-						DataBufferUtils.release(dataBuffer);
-						return value;
-					}
-					catch (InvalidDefinitionException ex) {
-						throw new CodecException("Type definition error: " + ex.getType(), ex);
-					}
-					catch (JsonProcessingException ex) {
-						throw new DecodingException("JSON decoding error: " + ex.getOriginalMessage(), ex);
-					}
-					catch (IOException ex) {
-						throw new DecodingException("I/O error while parsing input stream", ex);
-					}
-				});
-	}
-
-
-	// HttpMessageDecoder...
-
-	@Override
-	public Map<String, Object> getDecodeHints(ResolvableType actualType, ResolvableType elementType,
-			ServerHttpRequest request, ServerHttpResponse response) {
-
-		return getHints(actualType);
-	}
-
-	@Override
-	protected <A extends Annotation> A getAnnotation(MethodParameter parameter, Class<A> annotType) {
-		return parameter.getParameterAnnotation(annotType);
+		MimeType textMimeType = new MimeType(MimeTypeUtils.TEXT_PLAIN, charset);
+		Flux<String> decoded = STRING_DECODER.decode(input, STRING_TYPE, textMimeType, null);
+		return decoded.map(s -> DefaultDataBufferFactory.sharedInstance.wrap(s.getBytes(StandardCharsets.UTF_8)));
 	}
 
 }

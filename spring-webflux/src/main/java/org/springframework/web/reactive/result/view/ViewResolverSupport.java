@@ -1,11 +1,11 @@
 /*
- * Copyright 2002-2017 the original author or authors.
+ * Copyright 2002-2018 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- *      http://www.apache.org/licenses/LICENSE-2.0
+ *      https://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -21,8 +21,6 @@ import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
 
-import org.springframework.context.ApplicationContext;
-import org.springframework.context.ApplicationContextAware;
 import org.springframework.core.Ordered;
 import org.springframework.http.MediaType;
 import org.springframework.util.Assert;
@@ -31,10 +29,14 @@ import org.springframework.util.Assert;
  * Base class for {@code ViewResolver} implementations with shared properties.
  *
  * @author Rossen Stoyanchev
+ * @author Juergen Hoeller
  * @since 5.0
  */
-public abstract class ViewResolverSupport implements ApplicationContextAware, Ordered {
+public abstract class ViewResolverSupport implements Ordered {
 
+	/**
+	 * The default {@link MediaType content-type} for views.
+	 */
 	public static final MediaType DEFAULT_CONTENT_TYPE = MediaType.parseMediaType("text/html;charset=UTF-8");
 
 
@@ -42,9 +44,7 @@ public abstract class ViewResolverSupport implements ApplicationContextAware, Or
 
 	private Charset defaultCharset = StandardCharsets.UTF_8;
 
-	private ApplicationContext applicationContext;
-
-	private int order = Integer.MAX_VALUE;
+	private int order = Ordered.LOWEST_PRECEDENCE;
 
 
 	public ViewResolverSupport() {
@@ -59,9 +59,7 @@ public abstract class ViewResolverSupport implements ApplicationContextAware, Or
 	public void setSupportedMediaTypes(List<MediaType> supportedMediaTypes) {
 		Assert.notEmpty(supportedMediaTypes, "MediaType List must not be empty");
 		this.mediaTypes.clear();
-		if (supportedMediaTypes != null) {
-			this.mediaTypes.addAll(supportedMediaTypes);
-		}
+		this.mediaTypes.addAll(supportedMediaTypes);
 	}
 
 	/**
@@ -89,27 +87,15 @@ public abstract class ViewResolverSupport implements ApplicationContextAware, Or
 		return this.defaultCharset;
 	}
 
-
-	@Override
-	public void setApplicationContext(ApplicationContext applicationContext) {
-		this.applicationContext = applicationContext;
-	}
-
-	public ApplicationContext getApplicationContext() {
-		return this.applicationContext;
-	}
-
 	/**
-	 * Set the order in which this {@link ViewResolver}
-	 * is evaluated.
+	 * Specify the order value for this ViewResolver bean.
+	 * <p>The default value is {@code Ordered.LOWEST_PRECEDENCE}, meaning non-ordered.
+	 * @see org.springframework.core.Ordered#getOrder()
 	 */
 	public void setOrder(int order) {
 		this.order = order;
 	}
 
-	/**
-	 * Return the order in which this {@link ViewResolver} is evaluated.
-	 */
 	@Override
 	public int getOrder() {
 		return this.order;

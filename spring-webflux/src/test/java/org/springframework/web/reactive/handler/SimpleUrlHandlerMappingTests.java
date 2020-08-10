@@ -1,11 +1,11 @@
 /*
- * Copyright 2002-2016 the original author or authors.
+ * Copyright 2002-2020 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- *      http://www.apache.org/licenses/LICENSE-2.0
+ *      https://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -13,25 +13,25 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+
 package org.springframework.web.reactive.handler;
 
 import java.net.URI;
 
-import org.junit.Test;
+import org.junit.jupiter.api.Test;
 
 import org.springframework.context.annotation.AnnotationConfigApplicationContext;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.context.support.ClassPathXmlApplicationContext;
 import org.springframework.http.HttpMethod;
-import org.springframework.mock.http.server.reactive.test.MockServerHttpRequest;
+import org.springframework.http.server.PathContainer;
 import org.springframework.web.reactive.HandlerMapping;
 import org.springframework.web.server.ServerWebExchange;
+import org.springframework.web.testfixture.http.server.reactive.MockServerHttpRequest;
+import org.springframework.web.testfixture.server.MockServerWebExchange;
 
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertNotNull;
-import static org.junit.Assert.assertNull;
-import static org.junit.Assert.assertSame;
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.web.reactive.HandlerMapping.PATH_WITHIN_HANDLER_MAPPING_ATTRIBUTE;
 
 /**
@@ -42,7 +42,8 @@ import static org.springframework.web.reactive.HandlerMapping.PATH_WITHIN_HANDLE
 public class SimpleUrlHandlerMappingTests {
 
 	@Test
-	public void handlerMappingJavaConfig() throws Exception {
+	@SuppressWarnings("resource")
+	void handlerMappingJavaConfig() {
 		AnnotationConfigApplicationContext wac = new AnnotationConfigApplicationContext();
 		wac.register(WebConfig.class);
 		wac.refresh();
@@ -51,15 +52,16 @@ public class SimpleUrlHandlerMappingTests {
 		Object mainController = wac.getBean("mainController");
 		Object otherController = wac.getBean("otherController");
 
-		testUrl("/welcome.html", mainController, handlerMapping, "/welcome.html");
+		testUrl("/welcome.html", mainController, handlerMapping, "");
 		testUrl("/welcome.x", otherController, handlerMapping, "welcome.x");
 		testUrl("/welcome/", otherController, handlerMapping, "welcome");
-		testUrl("/show.html", mainController, handlerMapping, "/show.html");
-		testUrl("/bookseats.html", mainController, handlerMapping, "/bookseats.html");
+		testUrl("/show.html", mainController, handlerMapping, "");
+		testUrl("/bookseats.html", mainController, handlerMapping, "");
 	}
 
 	@Test
-	public void handlerMappingXmlConfig() throws Exception {
+	@SuppressWarnings("resource")
+	void handlerMappingXmlConfig() {
 		ClassPathXmlApplicationContext wac = new ClassPathXmlApplicationContext("map.xml", getClass());
 		wac.refresh();
 
@@ -70,10 +72,10 @@ public class SimpleUrlHandlerMappingTests {
 		testUrl("welcome.html", null, handlerMapping, null);
 		testUrl("/pathmatchingAA.html", mainController, handlerMapping, "pathmatchingAA.html");
 		testUrl("/pathmatchingA.html", null, handlerMapping, null);
-		testUrl("/administrator/pathmatching.html", mainController, handlerMapping, "/administrator/pathmatching.html");
+		testUrl("/administrator/pathmatching.html", mainController, handlerMapping, "");
 		testUrl("/administrator/test/pathmatching.html", mainController, handlerMapping, "test/pathmatching.html");
 		testUrl("/administratort/pathmatching.html", null, handlerMapping, null);
-		testUrl("/administrator/another/bla.xml", mainController, handlerMapping, "/administrator/another/bla.xml");
+		testUrl("/administrator/another/bla.xml", mainController, handlerMapping, "");
 		testUrl("/administrator/another/bla.gif", null, handlerMapping, null);
 		testUrl("/administrator/test/testlastbit", mainController, handlerMapping, "test/testlastbit");
 		testUrl("/administrator/test/testla", null, handlerMapping, null);
@@ -85,7 +87,7 @@ public class SimpleUrlHandlerMappingTests {
 		testUrl("/XpathXXmatching.html", null, handlerMapping, null);
 		testUrl("/XXpathmatching.html", null, handlerMapping, null);
 		testUrl("/show12.html", mainController, handlerMapping, "show12.html");
-		testUrl("/show123.html", mainController, handlerMapping, "/show123.html");
+		testUrl("/show123.html", mainController, handlerMapping, "");
 		testUrl("/show1.html", mainController, handlerMapping, "show1.html");
 		testUrl("/reallyGood-test-is-this.jpeg", mainController, handlerMapping, "reallyGood-test-is-this.jpeg");
 		testUrl("/reallyGood-tst-is-this.jpeg", null, handlerMapping, null);
@@ -94,32 +96,32 @@ public class SimpleUrlHandlerMappingTests {
 		testUrl("/anotherTest", mainController, handlerMapping, "anotherTest");
 		testUrl("/stillAnotherTest", null, handlerMapping, null);
 		testUrl("outofpattern*ye", null, handlerMapping, null);
-		testUrl("/test%26t%20est/path%26m%20atching.html", null, handlerMapping, null);
-
 	}
 
-	private void testUrl(String url, Object bean, HandlerMapping handlerMapping, String pathWithinMapping) {
-		ServerWebExchange exchange = MockServerHttpRequest.method(HttpMethod.GET, URI.create(url)).toExchange();
+	void testUrl(String url, Object bean, HandlerMapping handlerMapping, String pathWithinMapping) {
+		MockServerHttpRequest request = MockServerHttpRequest.method(HttpMethod.GET, URI.create(url)).build();
+		ServerWebExchange exchange = MockServerWebExchange.from(request);
 		Object actual = handlerMapping.getHandler(exchange).block();
 		if (bean != null) {
-			assertNotNull(actual);
-			assertSame(bean, actual);
+			assertThat(actual).isNotNull();
+			assertThat(actual).isSameAs(bean);
 			//noinspection OptionalGetWithoutIsPresent
-			assertEquals(pathWithinMapping, exchange.getAttribute(PATH_WITHIN_HANDLER_MAPPING_ATTRIBUTE).get());
+			PathContainer path = exchange.getAttribute(PATH_WITHIN_HANDLER_MAPPING_ATTRIBUTE);
+			assertThat(path).isNotNull();
+			assertThat(path.value()).isEqualTo(pathWithinMapping);
 		}
 		else {
-			assertNull(actual);
+			assertThat(actual).isNull();
 		}
 	}
 
 
 	@Configuration
 	static class WebConfig {
-	
+
 		@Bean @SuppressWarnings("unused")
 		public SimpleUrlHandlerMapping handlerMapping() {
 			SimpleUrlHandlerMapping hm = new SimpleUrlHandlerMapping();
-			hm.setUseTrailingSlashMatch(true);
 			hm.registerHandler("/welcome*", otherController());
 			hm.registerHandler("/welcome.html", mainController());
 			hm.registerHandler("/show.html", mainController());

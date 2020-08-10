@@ -5,7 +5,7 @@
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- *      http://www.apache.org/licenses/LICENSE-2.0
+ *      https://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -15,6 +15,8 @@
  */
 
 package org.springframework.web.multipart;
+
+import org.springframework.lang.Nullable;
 
 /**
  * MultipartException subclass thrown when an upload exceeds the
@@ -44,7 +46,7 @@ public class MaxUploadSizeExceededException extends MultipartException {
 	 * or -1 if the size limit isn't known
 	 * @param ex root cause from multipart parsing API in use
 	 */
-	public MaxUploadSizeExceededException(long maxUploadSize, Throwable ex) {
+	public MaxUploadSizeExceededException(long maxUploadSize, @Nullable Throwable ex) {
 		super("Maximum upload size " + (maxUploadSize >= 0 ? "of " + maxUploadSize + " bytes " : "") + "exceeded", ex);
 		this.maxUploadSize = maxUploadSize;
 	}

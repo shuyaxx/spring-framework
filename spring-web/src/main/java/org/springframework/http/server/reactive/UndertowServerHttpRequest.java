@@ -1,11 +1,11 @@
 /*
- * Copyright 2002-2016 the original author or authors.
+ * Copyright 2002-2020 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- *      http://www.apache.org/licenses/LICENSE-2.0
+ *      https://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -19,26 +19,26 @@ package org.springframework.http.server.reactive;
 import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.net.URI;
+import java.net.URISyntaxException;
 import java.nio.ByteBuffer;
-import java.util.Optional;
+
+import javax.net.ssl.SSLSession;
 
 import io.undertow.connector.ByteBufferPool;
 import io.undertow.connector.PooledByteBuffer;
 import io.undertow.server.HttpServerExchange;
 import io.undertow.server.handlers.Cookie;
-import io.undertow.util.HeaderValues;
-import org.xnio.ChannelListener;
 import org.xnio.channels.StreamSourceChannel;
 import reactor.core.publisher.Flux;
 
 import org.springframework.core.io.buffer.DataBuffer;
 import org.springframework.core.io.buffer.DataBufferFactory;
 import org.springframework.http.HttpCookie;
-import org.springframework.http.HttpHeaders;
-import org.springframework.http.HttpMethod;
+import org.springframework.lang.Nullable;
 import org.springframework.util.Assert;
 import org.springframework.util.LinkedMultiValueMap;
 import org.springframework.util.MultiValueMap;
+import org.springframework.util.ObjectUtils;
 import org.springframework.util.StringUtils;
 
 /**
@@ -48,44 +48,33 @@ import org.springframework.util.StringUtils;
  * @author Rossen Stoyanchev
  * @since 5.0
  */
-public class UndertowServerHttpRequest extends AbstractServerHttpRequest {
+class UndertowServerHttpRequest extends AbstractServerHttpRequest {
 
 	private final HttpServerExchange exchange;
 
 	private final RequestBodyPublisher body;
 
 
-	public UndertowServerHttpRequest(HttpServerExchange exchange, DataBufferFactory bufferFactory) {
-		super(initUri(exchange), initHeaders(exchange));
+	public UndertowServerHttpRequest(HttpServerExchange exchange, DataBufferFactory bufferFactory)
+			throws URISyntaxException {
+
+		super(initUri(exchange), "", new UndertowHeadersAdapter(exchange.getRequestHeaders()));
 		this.exchange = exchange;
 		this.body = new RequestBodyPublisher(exchange, bufferFactory);
 		this.body.registerListeners(exchange);
 	}
 
-	private static URI initUri(HttpServerExchange exchange) {
-		Assert.notNull(exchange, "HttpServerExchange is required.");
+	private static URI initUri(HttpServerExchange exchange) throws URISyntaxException {
+		Assert.notNull(exchange, "HttpServerExchange is required");
 		String requestURL = exchange.getRequestURL();
 		String query = exchange.getQueryString();
-		String requestUriAndQuery = StringUtils.isEmpty(query) ? requestURL : requestURL + "?" + query;
-		return URI.create(requestUriAndQuery);
-	}
-
-	private static HttpHeaders initHeaders(HttpServerExchange exchange) {
-		HttpHeaders headers = new HttpHeaders();
-		for (HeaderValues values : exchange.getRequestHeaders()) {
-			headers.put(values.getHeaderName().toString(), values);
-		}
-		return headers;
-	}
-
-
-	public HttpServerExchange getUndertowExchange() {
-		return this.exchange;
+		String requestUriAndQuery = (StringUtils.hasLength(query) ? requestURL + "?" + query : requestURL);
+		return new URI(requestUriAndQuery);
 	}
 
 	@Override
-	public HttpMethod getMethod() {
-		return HttpMethod.valueOf(this.getUndertowExchange().getRequestMethod().toString());
+	public String getMethodValue() {
+		return this.exchange.getRequestMethod().toString();
 	}
 
 	@Override
@@ -100,8 +89,25 @@ public class UndertowServerHttpRequest extends AbstractServerHttpRequest {
 	}
 
 	@Override
-	public Optional<InetSocketAddress> getRemoteAddress() {
-		return Optional.ofNullable(this.exchange.getSourceAddress());
+	@Nullable
+	public InetSocketAddress getLocalAddress() {
+		return this.exchange.getDestinationAddress();
+	}
+
+	@Override
+	@Nullable
+	public InetSocketAddress getRemoteAddress() {
+		return this.exchange.getSourceAddress();
+	}
+
+	@Nullable
+	@Override
+	protected SslInfo initSslInfo() {
+		SSLSession session = this.exchange.getConnection().getSslSession();
+		if (session != null) {
+			return new DefaultSslInfo(session);
+		}
+		return null;
 	}
 
 	@Override
@@ -109,8 +115,19 @@ public class UndertowServerHttpRequest extends AbstractServerHttpRequest {
 		return Flux.from(this.body);
 	}
 
+	@SuppressWarnings("unchecked")
+	@Override
+	public <T> T getNativeRequest() {
+		return (T) this.exchange;
+	}
 
-	private static class RequestBodyPublisher extends AbstractListenerReadPublisher<DataBuffer> {
+	@Override
+	protected String initId() {
+		return ObjectUtils.getIdentityHexString(this.exchange.getConnection());
+	}
+
+
+	private class RequestBodyPublisher extends AbstractListenerReadPublisher<DataBuffer> {
 
 		private final StreamSourceChannel channel;
 
@@ -118,10 +135,8 @@ public class UndertowServerHttpRequest extends AbstractServerHttpRequest {
 
 		private final ByteBufferPool byteBufferPool;
 
-		private PooledByteBuffer pooledByteBuffer;
-
-
 		public RequestBodyPublisher(HttpServerExchange exchange, DataBufferFactory bufferFactory) {
+			super(UndertowServerHttpRequest.this.getLogPrefix());
 			this.channel = exchange.getRequestChannel();
 			this.bufferFactory = bufferFactory;
 			this.byteBufferPool = exchange.getConnection().getByteBufferPool();
@@ -132,43 +147,55 @@ public class UndertowServerHttpRequest extends AbstractServerHttpRequest {
 				onAllDataRead();
 				next.proceed();
 			});
-			this.channel.getReadSetter().set((ChannelListener<StreamSourceChannel>) c -> onDataAvailable());
-			this.channel.getCloseSetter().set((ChannelListener<StreamSourceChannel>) c -> onAllDataRead());
+			this.channel.getReadSetter().set(c -> onDataAvailable());
+			this.channel.getCloseSetter().set(c -> onAllDataRead());
 			this.channel.resumeReads();
 		}
 
 		@Override
 		protected void checkOnDataAvailable() {
+			this.channel.resumeReads();
+			// We are allowed to try, it will return null if data is not available
 			onDataAvailable();
 		}
 
 		@Override
-		protected DataBuffer read() throws IOException {
-			if (this.pooledByteBuffer == null) {
-				this.pooledByteBuffer = this.byteBufferPool.allocate();
-			}
-			ByteBuffer byteBuffer = this.pooledByteBuffer.getBuffer();
-			int read = this.channel.read(byteBuffer);
-			if (logger.isTraceEnabled()) {
-				logger.trace("read:" + read);
-			}
-
-			if (read > 0) {
-				byteBuffer.flip();
-				return this.bufferFactory.wrap(byteBuffer);
-			}
-			else if (read == -1) {
-				onAllDataRead();
-			}
-			return null;
+		protected void readingPaused() {
+			this.channel.suspendReads();
 		}
 
 		@Override
-		public void onAllDataRead() {
-			if (this.pooledByteBuffer != null && this.pooledByteBuffer.isOpen()) {
-				this.pooledByteBuffer.close();
+		@Nullable
+		protected DataBuffer read() throws IOException {
+			PooledByteBuffer pooledByteBuffer = this.byteBufferPool.allocate();
+			try {
+				ByteBuffer byteBuffer = pooledByteBuffer.getBuffer();
+				int read = this.channel.read(byteBuffer);
+
+				if (rsReadLogger.isTraceEnabled()) {
+					rsReadLogger.trace(getLogPrefix() + "Read " + read + (read != -1 ? " bytes" : ""));
+				}
+
+				if (read > 0) {
+					byteBuffer.flip();
+					DataBuffer dataBuffer = this.bufferFactory.allocateBuffer(read);
+					dataBuffer.write(byteBuffer);
+					return dataBuffer;
+				}
+				else if (read == -1) {
+					onAllDataRead();
+				}
+				return null;
 			}
-			super.onAllDataRead();
+			finally {
+				pooledByteBuffer.close();
+			}
+		}
+
+		@Override
+		protected void discardData() {
+			// Nothing to discard since we pass data buffers on immediately..
 		}
 	}
+
 }

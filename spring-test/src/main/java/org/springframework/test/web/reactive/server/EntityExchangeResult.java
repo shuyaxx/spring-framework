@@ -5,7 +5,7 @@
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- *      http://www.apache.org/licenses/LICENSE-2.0
+ *      https://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -15,6 +15,8 @@
  */
 
 package org.springframework.test.web.reactive.server;
+
+import org.springframework.lang.Nullable;
 
 /**
  * {@code ExchangeResult} sub-class that exposes the response body fully
@@ -27,10 +29,11 @@ package org.springframework.test.web.reactive.server;
  */
 public class EntityExchangeResult<T> extends ExchangeResult {
 
+	@Nullable
 	private final T body;
 
 
-	EntityExchangeResult(ExchangeResult result, T body) {
+	EntityExchangeResult(ExchangeResult result, @Nullable T body) {
 		super(result);
 		this.body = body;
 	}
@@ -39,6 +42,7 @@ public class EntityExchangeResult<T> extends ExchangeResult {
 	/**
 	 * Return the entity extracted from the response body.
 	 */
+	@Nullable
 	public T getResponseBody() {
 		return this.body;
 	}

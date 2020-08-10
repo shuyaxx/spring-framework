@@ -1,11 +1,11 @@
 /*
- * Copyright 2002-2017 the original author or authors.
+ * Copyright 2002-2018 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- *      http://www.apache.org/licenses/LICENSE-2.0
+ *      https://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -28,17 +28,17 @@ import org.springframework.http.MediaType;
 import org.springframework.http.ReactiveHttpInputMessage;
 import org.springframework.http.server.reactive.ServerHttpRequest;
 import org.springframework.http.server.reactive.ServerHttpResponse;
+import org.springframework.lang.Nullable;
 
 /**
  * Strategy for reading from a {@link ReactiveHttpInputMessage} and decoding
  * the stream of bytes to Objects of type {@code <T>}.
  *
- * @param <T> the type of objects in the decoded output stream
- *
  * @author Rossen Stoyanchev
  * @author Arjen Poutsma
  * @author Sebastien Deleuze
  * @since 5.0
+ * @param <T> the type of objects in the decoded output stream
  */
 public interface HttpMessageReader<T> {
 
@@ -50,10 +50,10 @@ public interface HttpMessageReader<T> {
 	/**
 	 * Whether the given object type is supported by this reader.
 	 * @param elementType the type of object to check
-	 * @param mediaType the media type for the read, possibly {@code null}
+	 * @param mediaType the media type for the read (possibly {@code null})
 	 * @return {@code true} if readable, {@code false} otherwise
 	 */
-	boolean canRead(ResolvableType elementType, MediaType mediaType);
+	boolean canRead(ResolvableType elementType, @Nullable MediaType mediaType);
 
 	/**
 	 * Read from the input message and encode to a stream of objects.

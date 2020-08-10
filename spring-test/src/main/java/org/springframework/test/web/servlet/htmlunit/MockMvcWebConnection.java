@@ -1,11 +1,11 @@
 /*
- * Copyright 2002-2017 the original author or authors.
+ * Copyright 2002-2019 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- *      http://www.apache.org/licenses/LICENSE-2.0
+ *      https://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -29,6 +29,7 @@ import com.gargoylesoftware.htmlunit.WebResponse;
 import com.gargoylesoftware.htmlunit.util.Cookie;
 import org.apache.http.impl.cookie.BasicClientCookie;
 
+import org.springframework.lang.Nullable;
 import org.springframework.mock.web.MockHttpServletResponse;
 import org.springframework.mock.web.MockHttpSession;
 import org.springframework.test.web.servlet.MockMvc;
@@ -62,6 +63,7 @@ public final class MockMvcWebConnection implements WebConnection {
 
 	private final MockMvc mockMvc;
 
+	@Nullable
 	private final String contextPath;
 
 	private WebClient webClient;
@@ -86,11 +88,11 @@ public final class MockMvcWebConnection implements WebConnection {
 	 * to {@link javax.servlet.http.HttpServletRequest#getContextPath()}
 	 * which states that it can be an empty string and otherwise must start
 	 * with a "/" character and not end with a "/" character.
-	 * @param mockMvc the {@code MockMvc} instance to use; never {@code null}
-	 * @param webClient  the {@link WebClient} to use. never {@code null}
+	 * @param mockMvc the {@code MockMvc} instance to use (never {@code null})
+	 * @param webClient the {@link WebClient} to use (never {@code null})
 	 * @param contextPath the contextPath to use
 	 */
-	public MockMvcWebConnection(MockMvc mockMvc, WebClient webClient, String contextPath) {
+	public MockMvcWebConnection(MockMvc mockMvc, WebClient webClient, @Nullable String contextPath) {
 		Assert.notNull(mockMvc, "MockMvc must not be null");
 		Assert.notNull(webClient, "WebClient must not be null");
 		validateContextPath(contextPath);
@@ -108,8 +110,8 @@ public final class MockMvcWebConnection implements WebConnection {
 	 * a "/" character and not end with a "/" character.
 	 * @param contextPath the path to validate
 	 */
-	static void validateContextPath(String contextPath) {
-		if (contextPath == null || "".equals(contextPath)) {
+	static void validateContextPath(@Nullable String contextPath) {
+		if (contextPath == null || contextPath.isEmpty()) {
 			return;
 		}
 		Assert.isTrue(contextPath.startsWith("/"), () -> "contextPath '" + contextPath + "' must start with '/'.");
@@ -123,6 +125,7 @@ public final class MockMvcWebConnection implements WebConnection {
 	}
 
 
+	@Override
 	public WebResponse getResponse(WebRequest webRequest) throws IOException {
 		long startTime = System.currentTimeMillis();
 		HtmlUnitRequestBuilder requestBuilder = new HtmlUnitRequestBuilder(this.sessions, this.webClient, webRequest);
@@ -153,9 +156,6 @@ public final class MockMvcWebConnection implements WebConnection {
 	}
 
 	private void storeCookies(WebRequest webRequest, javax.servlet.http.Cookie[] cookies) {
-		if (cookies == null) {
-			return;
-		}
 		Date now = new Date();
 		CookieManager cookieManager = this.webClient.getCookieManager();
 		for (javax.servlet.http.Cookie cookie : cookies) {

@@ -1,11 +1,11 @@
 /*
- * Copyright 2002-2017 the original author or authors.
+ * Copyright 2002-2018 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- *      http://www.apache.org/licenses/LICENSE-2.0
+ *      https://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -58,13 +58,11 @@ public class XhrClientSockJsSession extends AbstractClientSockJsSession {
 			XhrTransport transport, SettableListenableFuture<WebSocketSession> connectFuture) {
 
 		super(request, handler, connectFuture);
-		Assert.notNull(transport, "'transport' is required");
+		Assert.notNull(transport, "XhrTransport is required");
 		this.transport = transport;
 		this.headers = request.getHttpRequestHeaders();
 		this.sendHeaders = new HttpHeaders();
-		if (this.headers != null) {
-			this.sendHeaders.putAll(this.headers);
-		}
+		this.sendHeaders.putAll(this.headers);
 		this.sendHeaders.setContentType(MediaType.APPLICATION_JSON);
 		this.sendUrl = request.getSockJsUrlInfo().getTransportUrl(TransportType.XHR_SEND);
 	}
@@ -81,7 +79,8 @@ public class XhrClientSockJsSession extends AbstractClientSockJsSession {
 
 	@Override
 	public InetSocketAddress getRemoteAddress() {
-		return new InetSocketAddress(getUri().getHost(), getUri().getPort());
+		URI uri = getUri();
+		return (uri != null ? new InetSocketAddress(uri.getHost(), uri.getPort()) : null);
 	}
 
 	@Override

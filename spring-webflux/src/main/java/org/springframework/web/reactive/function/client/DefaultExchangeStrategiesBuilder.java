@@ -1,11 +1,11 @@
 /*
- * Copyright 2002-2017 the original author or authors.
+ * Copyright 2002-2019 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- *      http://www.apache.org/licenses/LICENSE-2.0
+ *      https://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -20,67 +20,71 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.function.Consumer;
-import java.util.function.Supplier;
-import java.util.stream.Stream;
 
 import org.springframework.http.codec.ClientCodecConfigurer;
 import org.springframework.http.codec.HttpMessageReader;
 import org.springframework.http.codec.HttpMessageWriter;
-import org.springframework.util.Assert;
 
 /**
  * Default implementation of {@link ExchangeStrategies.Builder}.
  *
  * @author Arjen Poutsma
+ * @author Brian Clozel
  * @since 5.0
  */
-class DefaultExchangeStrategiesBuilder implements ExchangeStrategies.Builder {
+final class DefaultExchangeStrategiesBuilder implements ExchangeStrategies.Builder {
 
-	private final ClientCodecConfigurer codecConfigurer = ClientCodecConfigurer.create();
+	final static ExchangeStrategies DEFAULT_EXCHANGE_STRATEGIES;
+
+	static {
+		DefaultExchangeStrategiesBuilder builder = new DefaultExchangeStrategiesBuilder();
+		builder.defaultConfiguration();
+		DEFAULT_EXCHANGE_STRATEGIES = builder.build();
+	}
+
+
+	private final ClientCodecConfigurer codecConfigurer;
 
 
 	public DefaultExchangeStrategiesBuilder() {
+		this.codecConfigurer = ClientCodecConfigurer.create();
 		this.codecConfigurer.registerDefaults(false);
 	}
+
+	private DefaultExchangeStrategiesBuilder(DefaultExchangeStrategies other) {
+		this.codecConfigurer = other.codecConfigurer.clone();
+	}
+
 
 	public void defaultConfiguration() {
 		this.codecConfigurer.registerDefaults(true);
 	}
 
 	@Override
-	public ExchangeStrategies.Builder defaultCodecs(
-			Consumer<ClientCodecConfigurer.ClientDefaultCodecsConfigurer> consumer) {
-		Assert.notNull(consumer, "'consumer' must not be null");
-		consumer.accept(this.codecConfigurer.defaultCodecs());
-		return this;
-	}
-
-	@Override
-	public ExchangeStrategies.Builder customCodecs(
-			Consumer<ClientCodecConfigurer.CustomCodecsConfigurer> consumer) {
-		Assert.notNull(consumer, "'consumer' must not be null");
-		consumer.accept(this.codecConfigurer.customCodecs());
+	public ExchangeStrategies.Builder codecs(Consumer<ClientCodecConfigurer> consumer) {
+		consumer.accept(this.codecConfigurer);
 		return this;
 	}
 
 	@Override
 	public ExchangeStrategies build() {
-		return new DefaultExchangeStrategies(this.codecConfigurer.getReaders(),
-				this.codecConfigurer.getWriters());
+		return new DefaultExchangeStrategies(this.codecConfigurer);
 	}
 
 
 	private static class DefaultExchangeStrategies implements ExchangeStrategies {
 
-		private final List<HttpMessageReader<?>> messageReaders;
+		private final ClientCodecConfigurer codecConfigurer;
 
-		private final List<HttpMessageWriter<?>> messageWriters;
+		private final List<HttpMessageReader<?>> readers;
 
-		public DefaultExchangeStrategies(
-				List<HttpMessageReader<?>> messageReaders, List<HttpMessageWriter<?>> messageWriters) {
+		private final List<HttpMessageWriter<?>> writers;
 
-			this.messageReaders = unmodifiableCopy(messageReaders);
-			this.messageWriters = unmodifiableCopy(messageWriters);
+
+		public DefaultExchangeStrategies(ClientCodecConfigurer codecConfigurer) {
+			this.codecConfigurer = codecConfigurer;
+			this.readers = unmodifiableCopy(this.codecConfigurer.getReaders());
+			this.writers = unmodifiableCopy(this.codecConfigurer.getWriters());
 		}
 
 		private static <T> List<T> unmodifiableCopy(List<? extends T> list) {
@@ -88,13 +92,18 @@ class DefaultExchangeStrategiesBuilder implements ExchangeStrategies.Builder {
 		}
 
 		@Override
-		public Supplier<Stream<HttpMessageReader<?>>> messageReaders() {
-			return this.messageReaders::stream;
+		public List<HttpMessageReader<?>> messageReaders() {
+			return this.readers;
 		}
 
 		@Override
-		public Supplier<Stream<HttpMessageWriter<?>>> messageWriters() {
-			return this.messageWriters::stream;
+		public List<HttpMessageWriter<?>> messageWriters() {
+			return this.writers;
+		}
+
+		@Override
+		public Builder mutate() {
+			return new DefaultExchangeStrategiesBuilder(this);
 		}
 	}
 

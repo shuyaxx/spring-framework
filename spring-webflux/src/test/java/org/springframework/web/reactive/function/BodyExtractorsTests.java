@@ -1,11 +1,11 @@
 /*
- * Copyright 2002-2017 the original author or authors.
+ * Copyright 2002-2020 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- *      http://www.apache.org/licenses/LICENSE-2.0
+ *      https://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -21,24 +21,30 @@ import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
-import java.util.function.Supplier;
-import java.util.stream.Stream;
 
 import com.fasterxml.jackson.annotation.JsonView;
-import org.junit.Before;
-import org.junit.Test;
+import io.netty.buffer.PooledByteBufAllocator;
+import io.netty.util.IllegalReferenceCountException;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import reactor.test.StepVerifier;
+import reactor.test.publisher.TestPublisher;
 
+import org.springframework.core.ParameterizedTypeReference;
 import org.springframework.core.codec.ByteBufferDecoder;
 import org.springframework.core.codec.StringDecoder;
 import org.springframework.core.io.buffer.DataBuffer;
 import org.springframework.core.io.buffer.DefaultDataBuffer;
 import org.springframework.core.io.buffer.DefaultDataBufferFactory;
+import org.springframework.core.io.buffer.NettyDataBuffer;
+import org.springframework.core.io.buffer.NettyDataBufferFactory;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ReactiveHttpInputMessage;
 import org.springframework.http.codec.DecoderHttpMessageReader;
@@ -53,15 +59,18 @@ import org.springframework.http.codec.multipart.SynchronossPartHttpMessageReader
 import org.springframework.http.codec.xml.Jaxb2XmlDecoder;
 import org.springframework.http.server.reactive.ServerHttpRequest;
 import org.springframework.http.server.reactive.ServerHttpResponse;
-import org.springframework.mock.http.server.reactive.test.MockServerHttpRequest;
 import org.springframework.util.MultiValueMap;
+import org.springframework.web.testfixture.http.client.reactive.MockClientHttpResponse;
+import org.springframework.web.testfixture.http.server.reactive.MockServerHttpRequest;
 
-import static org.junit.Assert.*;
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatExceptionOfType;
 import static org.springframework.http.codec.json.Jackson2CodecSupport.JSON_VIEW_HINT;
 
 /**
  * @author Arjen Poutsma
  * @author Sebastien Deleuze
+ * @author Brian Clozel
  */
 public class BodyExtractorsTests {
 
@@ -69,12 +78,14 @@ public class BodyExtractorsTests {
 
 	private Map<String, Object> hints;
 
+	private Optional<ServerHttpResponse> serverResponse = Optional.empty();
 
-	@Before
+
+	@BeforeEach
 	public void createContext() {
 		final List<HttpMessageReader<?>> messageReaders = new ArrayList<>();
 		messageReaders.add(new DecoderHttpMessageReader<>(new ByteBufferDecoder()));
-		messageReaders.add(new DecoderHttpMessageReader<>(StringDecoder.allMimeTypes(true)));
+		messageReaders.add(new DecoderHttpMessageReader<>(StringDecoder.allMimeTypes()));
 		messageReaders.add(new DecoderHttpMessageReader<>(new Jaxb2XmlDecoder()));
 		messageReaders.add(new DecoderHttpMessageReader<>(new Jackson2JsonDecoder()));
 		messageReaders.add(new FormHttpMessageReader());
@@ -86,13 +97,13 @@ public class BodyExtractorsTests {
 
 		this.context = new BodyExtractor.Context() {
 			@Override
-			public Supplier<Stream<HttpMessageReader<?>>> messageReaders() {
-				return messageReaders::stream;
+			public List<HttpMessageReader<?>> messageReaders() {
+				return messageReaders;
 			}
 
 			@Override
 			public Optional<ServerHttpResponse> serverResponse() {
-				return Optional.empty();
+				return serverResponse;
 			}
 
 			@Override
@@ -105,10 +116,10 @@ public class BodyExtractorsTests {
 
 
 	@Test
-	public void toMono() throws Exception {
+	public void toMono() {
 		BodyExtractor<Mono<String>, ReactiveHttpInputMessage> extractor = BodyExtractors.toMono(String.class);
 
-		DefaultDataBufferFactory factory = new DefaultDataBufferFactory();
+		DefaultDataBufferFactory factory = DefaultDataBufferFactory.sharedInstance;
 		DefaultDataBuffer dataBuffer =
 				factory.wrap(ByteBuffer.wrap("foo".getBytes(StandardCharsets.UTF_8)));
 		Flux<DataBuffer> body = Flux.just(dataBuffer);
@@ -123,13 +134,33 @@ public class BodyExtractorsTests {
 	}
 
 	@Test
-	public void toMonoWithHints() throws Exception {
+	public void toMonoParameterizedTypeReference() {
+		BodyExtractor<Mono<Map<String, String>>, ReactiveHttpInputMessage> extractor =
+				BodyExtractors.toMono(new ParameterizedTypeReference<Map<String, String>>() {});
+
+		byte[] bytes = "{\"username\":\"foo\",\"password\":\"bar\"}".getBytes(StandardCharsets.UTF_8);
+		DefaultDataBuffer dataBuffer = DefaultDataBufferFactory.sharedInstance.wrap(ByteBuffer.wrap(bytes));
+		Flux<DataBuffer> body = Flux.just(dataBuffer);
+
+		MockServerHttpRequest request = MockServerHttpRequest.post("/").contentType(MediaType.APPLICATION_JSON).body(body);
+		Mono<Map<String, String>> result = extractor.extract(request, this.context);
+
+		Map<String, String > expected = new LinkedHashMap<>();
+		expected.put("username", "foo");
+		expected.put("password", "bar");
+		StepVerifier.create(result)
+				.expectNext(expected)
+				.expectComplete()
+				.verify();
+	}
+
+	@Test
+	public void toMonoWithHints() {
 		BodyExtractor<Mono<User>, ReactiveHttpInputMessage> extractor = BodyExtractors.toMono(User.class);
 		this.hints.put(JSON_VIEW_HINT, SafeToDeserialize.class);
 
-		DefaultDataBufferFactory factory = new DefaultDataBufferFactory();
-		DefaultDataBuffer dataBuffer =
-				factory.wrap(ByteBuffer.wrap("{\"username\":\"foo\",\"password\":\"bar\"}".getBytes(StandardCharsets.UTF_8)));
+		byte[] bytes = "{\"username\":\"foo\",\"password\":\"bar\"}".getBytes(StandardCharsets.UTF_8);
+		DefaultDataBuffer dataBuffer = DefaultDataBufferFactory.sharedInstance.wrap(ByteBuffer.wrap(bytes));
 		Flux<DataBuffer> body = Flux.just(dataBuffer);
 
 		MockServerHttpRequest request = MockServerHttpRequest.post("/")
@@ -140,20 +171,66 @@ public class BodyExtractorsTests {
 
 		StepVerifier.create(result)
 				.consumeNextWith(user -> {
-					assertEquals("foo", user.getUsername());
-					assertNull(user.getPassword());
+					assertThat(user.getUsername()).isEqualTo("foo");
+					assertThat(user.getPassword()).isNull();
 				})
 				.expectComplete()
 				.verify();
 	}
 
+	@Test  // SPR-15758
+	public void toMonoWithEmptyBodyAndNoContentType() {
+		BodyExtractor<Mono<Map<String, String>>, ReactiveHttpInputMessage> extractor =
+				BodyExtractors.toMono(new ParameterizedTypeReference<Map<String, String>>() {});
+
+		MockServerHttpRequest request = MockServerHttpRequest.post("/").body(Flux.empty());
+		Mono<Map<String, String>> result = extractor.extract(request, this.context);
+
+		StepVerifier.create(result).expectComplete().verify();
+	}
+
 	@Test
-	public void toFlux() throws Exception {
+	public void toMonoVoidAsClientShouldConsumeAndCancel() {
+		byte[] bytes = "foo".getBytes(StandardCharsets.UTF_8);
+		DefaultDataBuffer dataBuffer = DefaultDataBufferFactory.sharedInstance.wrap(ByteBuffer.wrap(bytes));
+		TestPublisher<DataBuffer> body = TestPublisher.create();
+
+		BodyExtractor<Mono<Void>, ReactiveHttpInputMessage> extractor = BodyExtractors.toMono(Void.class);
+		MockClientHttpResponse response = new MockClientHttpResponse(HttpStatus.OK);
+		response.setBody(body.flux());
+
+		StepVerifier.create(extractor.extract(response, this.context))
+				.then(() -> {
+					body.assertWasSubscribed();
+					body.emit(dataBuffer);
+				})
+				.verifyComplete();
+
+		body.assertCancelled();
+	}
+
+	@Test
+	public void toMonoVoidAsClientWithEmptyBody() {
+		TestPublisher<DataBuffer> body = TestPublisher.create();
+
+		BodyExtractor<Mono<Void>, ReactiveHttpInputMessage> extractor = BodyExtractors.toMono(Void.class);
+		MockClientHttpResponse response = new MockClientHttpResponse(HttpStatus.OK);
+		response.setBody(body.flux());
+
+		StepVerifier.create(extractor.extract(response, this.context))
+				.then(() -> {
+					body.assertWasSubscribed();
+					body.complete();
+				})
+				.verifyComplete();
+	}
+
+	@Test
+	public void toFlux() {
 		BodyExtractor<Flux<String>, ReactiveHttpInputMessage> extractor = BodyExtractors.toFlux(String.class);
 
-		DefaultDataBufferFactory factory = new DefaultDataBufferFactory();
-		DefaultDataBuffer dataBuffer =
-				factory.wrap(ByteBuffer.wrap("foo".getBytes(StandardCharsets.UTF_8)));
+		byte[] bytes = "foo".getBytes(StandardCharsets.UTF_8);
+		DefaultDataBuffer dataBuffer = DefaultDataBufferFactory.sharedInstance.wrap(ByteBuffer.wrap(bytes));
 		Flux<DataBuffer> body = Flux.just(dataBuffer);
 
 		MockServerHttpRequest request = MockServerHttpRequest.post("/").body(body);
@@ -166,13 +243,13 @@ public class BodyExtractorsTests {
 	}
 
 	@Test
-	public void toFluxWithHints() throws Exception {
+	public void toFluxWithHints() {
 		BodyExtractor<Flux<User>, ReactiveHttpInputMessage> extractor = BodyExtractors.toFlux(User.class);
 		this.hints.put(JSON_VIEW_HINT, SafeToDeserialize.class);
 
-		DefaultDataBufferFactory factory = new DefaultDataBufferFactory();
-		DefaultDataBuffer dataBuffer =
-				factory.wrap(ByteBuffer.wrap("[{\"username\":\"foo\",\"password\":\"bar\"},{\"username\":\"bar\",\"password\":\"baz\"}]".getBytes(StandardCharsets.UTF_8)));
+		String text = "[{\"username\":\"foo\",\"password\":\"bar\"},{\"username\":\"bar\",\"password\":\"baz\"}]";
+		byte[] bytes = text.getBytes(StandardCharsets.UTF_8);
+		DefaultDataBuffer dataBuffer = DefaultDataBufferFactory.sharedInstance.wrap(ByteBuffer.wrap(bytes));
 		Flux<DataBuffer> body = Flux.just(dataBuffer);
 
 		MockServerHttpRequest request = MockServerHttpRequest.post("/")
@@ -183,24 +260,23 @@ public class BodyExtractorsTests {
 
 		StepVerifier.create(result)
 				.consumeNextWith(user -> {
-					assertEquals("foo", user.getUsername());
-					assertNull(user.getPassword());
+					assertThat(user.getUsername()).isEqualTo("foo");
+					assertThat(user.getPassword()).isNull();
 				})
 				.consumeNextWith(user -> {
-					assertEquals("bar", user.getUsername());
-					assertNull(user.getPassword());
+					assertThat(user.getUsername()).isEqualTo("bar");
+					assertThat(user.getPassword()).isNull();
 				})
 				.expectComplete()
 				.verify();
 	}
 
 	@Test
-	public void toFluxUnacceptable() throws Exception {
+	public void toFluxUnacceptable() {
 		BodyExtractor<Flux<String>, ReactiveHttpInputMessage> extractor = BodyExtractors.toFlux(String.class);
 
-		DefaultDataBufferFactory factory = new DefaultDataBufferFactory();
-		DefaultDataBuffer dataBuffer =
-				factory.wrap(ByteBuffer.wrap("foo".getBytes(StandardCharsets.UTF_8)));
+		byte[] bytes = "foo".getBytes(StandardCharsets.UTF_8);
+		DefaultDataBuffer dataBuffer = DefaultDataBufferFactory.sharedInstance.wrap(ByteBuffer.wrap(bytes));
 		Flux<DataBuffer> body = Flux.just(dataBuffer);
 
 		MockServerHttpRequest request = MockServerHttpRequest.post("/")
@@ -209,8 +285,8 @@ public class BodyExtractorsTests {
 
 		BodyExtractor.Context emptyContext = new BodyExtractor.Context() {
 			@Override
-			public Supplier<Stream<HttpMessageReader<?>>> messageReaders() {
-				return Stream::empty;
+			public List<HttpMessageReader<?>> messageReaders() {
+				return Collections.emptyList();
 			}
 
 			@Override
@@ -231,36 +307,33 @@ public class BodyExtractorsTests {
 	}
 
 	@Test
-	public void toFormData() throws Exception {
-		BodyExtractor<Mono<MultiValueMap<String, String>>, ServerHttpRequest> extractor = BodyExtractors.toFormData();
-
-		DefaultDataBufferFactory factory = new DefaultDataBufferFactory();
-		DefaultDataBuffer dataBuffer =
-				factory.wrap(ByteBuffer.wrap("name+1=value+1&name+2=value+2%2B1&name+2=value+2%2B2&name+3".getBytes(StandardCharsets.UTF_8)));
+	public void toFormData() {
+		byte[] bytes = "name+1=value+1&name+2=value+2%2B1&name+2=value+2%2B2&name+3".getBytes(StandardCharsets.UTF_8);
+		DefaultDataBuffer dataBuffer = DefaultDataBufferFactory.sharedInstance.wrap(ByteBuffer.wrap(bytes));
 		Flux<DataBuffer> body = Flux.just(dataBuffer);
 
 		MockServerHttpRequest request = MockServerHttpRequest.post("/")
 				.contentType(MediaType.APPLICATION_FORM_URLENCODED)
 				.body(body);
 
-		Mono<MultiValueMap<String, String>> result = extractor.extract(request, this.context);
+		Mono<MultiValueMap<String, String>> result = BodyExtractors.toFormData().extract(request, this.context);
 
 		StepVerifier.create(result)
 				.consumeNextWith(form -> {
-					assertEquals("Invalid result", 3, form.size());
-					assertEquals("Invalid result", "value 1", form.getFirst("name 1"));
+					assertThat(form.size()).as("Invalid result").isEqualTo(3);
+					assertThat(form.getFirst("name 1")).as("Invalid result").isEqualTo("value 1");
 					List<String> values = form.get("name 2");
-					assertEquals("Invalid result", 2, values.size());
-					assertEquals("Invalid result", "value 2+1", values.get(0));
-					assertEquals("Invalid result", "value 2+2", values.get(1));
-					assertNull("Invalid result", form.getFirst("name 3"));
+					assertThat(values.size()).as("Invalid result").isEqualTo(2);
+					assertThat(values.get(0)).as("Invalid result").isEqualTo("value 2+1");
+					assertThat(values.get(1)).as("Invalid result").isEqualTo("value 2+2");
+					assertThat(form.getFirst("name 3")).as("Invalid result").isNull();
 				})
 				.expectComplete()
 				.verify();
 	}
 
 	@Test
-	public void toParts() throws Exception {
+	public void toParts() {
 		BodyExtractor<Flux<Part>, ServerHttpRequest> extractor = BodyExtractors.toParts();
 
 		String bodyContents = "-----------------------------9051914041544843365972754266\r\n" +
@@ -281,9 +354,8 @@ public class BodyExtractorsTests {
 				"\r\n" +
 				"-----------------------------9051914041544843365972754266--\r\n";
 
-		DefaultDataBufferFactory factory = new DefaultDataBufferFactory();
-		DefaultDataBuffer dataBuffer =
-				factory.wrap(ByteBuffer.wrap(bodyContents.getBytes(StandardCharsets.UTF_8)));
+		byte[] bytes = bodyContents.getBytes(StandardCharsets.UTF_8);
+		DefaultDataBuffer dataBuffer = DefaultDataBufferFactory.sharedInstance.wrap(ByteBuffer.wrap(bytes));
 		Flux<DataBuffer> body = Flux.just(dataBuffer);
 
 		MockServerHttpRequest request = MockServerHttpRequest.post("/")
@@ -294,36 +366,38 @@ public class BodyExtractorsTests {
 
 		StepVerifier.create(result)
 				.consumeNextWith(part -> {
-					assertEquals("text", part.name());
-					assertTrue(part instanceof FormFieldPart);
+					assertThat(part.name()).isEqualTo("text");
+					boolean condition = part instanceof FormFieldPart;
+					assertThat(condition).isTrue();
 					FormFieldPart formFieldPart = (FormFieldPart) part;
-					assertEquals("text default", formFieldPart.value());
+					assertThat(formFieldPart.value()).isEqualTo("text default");
 				})
 				.consumeNextWith(part -> {
-					assertEquals("file1", part.name());
-					assertTrue(part instanceof FilePart);
+					assertThat(part.name()).isEqualTo("file1");
+					boolean condition = part instanceof FilePart;
+					assertThat(condition).isTrue();
 					FilePart filePart = (FilePart) part;
-					assertEquals("a.txt", filePart.filename());
-					assertEquals(MediaType.TEXT_PLAIN, filePart.headers().getContentType());
+					assertThat(filePart.filename()).isEqualTo("a.txt");
+					assertThat(filePart.headers().getContentType()).isEqualTo(MediaType.TEXT_PLAIN);
 				})
 				.consumeNextWith(part -> {
-					assertEquals("file2", part.name());
-					assertTrue(part instanceof FilePart);
+					assertThat(part.name()).isEqualTo("file2");
+					boolean condition = part instanceof FilePart;
+					assertThat(condition).isTrue();
 					FilePart filePart = (FilePart) part;
-					assertEquals("a.html", filePart.filename());
-					assertEquals(MediaType.TEXT_HTML, filePart.headers().getContentType());
+					assertThat(filePart.filename()).isEqualTo("a.html");
+					assertThat(filePart.headers().getContentType()).isEqualTo(MediaType.TEXT_HTML);
 				})
 				.expectComplete()
 				.verify();
 	}
 
 	@Test
-	public void toDataBuffers() throws Exception {
+	public void toDataBuffers() {
 		BodyExtractor<Flux<DataBuffer>, ReactiveHttpInputMessage> extractor = BodyExtractors.toDataBuffers();
 
-		DefaultDataBufferFactory factory = new DefaultDataBufferFactory();
-		DefaultDataBuffer dataBuffer =
-				factory.wrap(ByteBuffer.wrap("foo".getBytes(StandardCharsets.UTF_8)));
+		byte[] bytes = "foo".getBytes(StandardCharsets.UTF_8);
+		DefaultDataBuffer dataBuffer = DefaultDataBufferFactory.sharedInstance.wrap(ByteBuffer.wrap(bytes));
 		Flux<DataBuffer> body = Flux.just(dataBuffer);
 
 		MockServerHttpRequest request = MockServerHttpRequest.post("/").body(body);
@@ -333,6 +407,31 @@ public class BodyExtractorsTests {
 				.expectNext(dataBuffer)
 				.expectComplete()
 				.verify();
+	}
+
+	@Test // SPR-17054
+	public void unsupportedMediaTypeShouldConsumeAndCancel() {
+		NettyDataBufferFactory factory = new NettyDataBufferFactory(new PooledByteBufAllocator(true));
+		NettyDataBuffer buffer = factory.wrap(ByteBuffer.wrap("spring".getBytes(StandardCharsets.UTF_8)));
+		TestPublisher<DataBuffer> body = TestPublisher.create();
+
+		MockClientHttpResponse response = new MockClientHttpResponse(HttpStatus.OK);
+		response.getHeaders().setContentType(MediaType.APPLICATION_PDF);
+		response.setBody(body.flux());
+
+		BodyExtractor<Mono<User>, ReactiveHttpInputMessage> extractor = BodyExtractors.toMono(User.class);
+		StepVerifier.create(extractor.extract(response, this.context))
+				.then(() -> {
+					body.assertWasSubscribed();
+					body.emit(buffer);
+				})
+				.expectErrorSatisfies(throwable -> {
+					boolean condition = throwable instanceof UnsupportedMediaTypeException;
+					assertThat(condition).isTrue();
+					assertThatExceptionOfType(IllegalReferenceCountException.class).isThrownBy(
+							buffer::release);
+					body.assertCancelled();
+				}).verify();
 	}
 
 

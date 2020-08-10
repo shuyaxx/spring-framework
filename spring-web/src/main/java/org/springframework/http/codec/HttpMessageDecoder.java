@@ -1,11 +1,11 @@
 /*
- * Copyright 2002-2017 the original author or authors.
+ * Copyright 2002-2018 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- *      http://www.apache.org/licenses/LICENSE-2.0
+ *      https://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -29,6 +29,7 @@ import org.springframework.http.server.reactive.ServerHttpResponse;
  *
  * @author Rossen Stoyanchev
  * @since 5.0
+ * @param <T> the type of elements in the output stream
  */
 public interface HttpMessageDecoder<T> extends Decoder<T> {
 
@@ -37,9 +38,9 @@ public interface HttpMessageDecoder<T> extends Decoder<T> {
 	 * target controller method parameter.
 	 * @param actualType the actual target type to decode to, possibly a reactive
 	 * wrapper and sourced from {@link org.springframework.core.MethodParameter},
-	 * i.e. providing access to method parameter annotations.
+	 * i.e. providing access to method parameter annotations
 	 * @param elementType the element type within {@code Flux/Mono} that we're
-	 * trying to decode to.
+	 * trying to decode to
 	 * @param request the current request
 	 * @param response the current response
 	 * @return a Map with hints, possibly empty

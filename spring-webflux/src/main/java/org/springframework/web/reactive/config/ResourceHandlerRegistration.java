@@ -5,7 +5,7 @@
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- *      http://www.apache.org/licenses/LICENSE-2.0
+ *      https://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -17,12 +17,14 @@
 package org.springframework.web.reactive.config;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 
 import org.springframework.cache.Cache;
 import org.springframework.core.io.Resource;
 import org.springframework.core.io.ResourceLoader;
 import org.springframework.http.CacheControl;
+import org.springframework.lang.Nullable;
 import org.springframework.util.Assert;
 import org.springframework.web.reactive.resource.ResourceWebHandler;
 
@@ -38,10 +40,12 @@ public class ResourceHandlerRegistration {
 
 	private final String[] pathPatterns;
 
-	private final List<Resource> locations = new ArrayList<>();
+	private final List<String> locationValues = new ArrayList<>();
 
+	@Nullable
 	private CacheControl cacheControl;
 
+	@Nullable
 	private ResourceChainRegistration resourceChainRegistration;
 
 
@@ -52,7 +56,8 @@ public class ResourceHandlerRegistration {
 	 * @param pathPatterns one or more resource URL path patterns
 	 */
 	public ResourceHandlerRegistration(ResourceLoader resourceLoader, String... pathPatterns) {
-		Assert.notEmpty(pathPatterns, "At least one path pattern is required for resource handling.");
+		Assert.notNull(resourceLoader, "ResourceLoader is required");
+		Assert.notEmpty(pathPatterns, "At least one path pattern is required for resource handling");
 		this.resourceLoader = resourceLoader;
 		this.pathPatterns = pathPatterns;
 	}
@@ -73,16 +78,13 @@ public class ResourceHandlerRegistration {
 	 * chained method invocation
 	 */
 	public ResourceHandlerRegistration addResourceLocations(String... resourceLocations) {
-		for (String location : resourceLocations) {
-			this.locations.add(resourceLoader.getResource(location));
-		}
+		this.locationValues.addAll(Arrays.asList(resourceLocations));
 		return this;
 	}
 
 	/**
 	 * Specify the {@link CacheControl} which should be used
 	 * by the resource handler.
-	 *
 	 * @param cacheControl the CacheControl configuration to use
 	 * @return the same {@link ResourceHandlerRegistration} instance, for
 	 * chained method invocation
@@ -95,11 +97,9 @@ public class ResourceHandlerRegistration {
 	/**
 	 * Configure a chain of resource resolvers and transformers to use. This
 	 * can be useful, for example, to apply a version strategy to resource URLs.
-	 *
 	 * <p>If this method is not invoked, by default only a simple
 	 * {@code PathResourceResolver} is used in order to match URL paths to
 	 * resources under the configured locations.
-	 *
 	 * @param cacheResources whether to cache the result of resource resolution;
 	 * setting this to "true" is recommended for production (and "false" for
 	 * development, especially when applying a version strategy)
@@ -114,11 +114,9 @@ public class ResourceHandlerRegistration {
 	/**
 	 * Configure a chain of resource resolvers and transformers to use. This
 	 * can be useful, for example, to apply a version strategy to resource URLs.
-	 *
 	 * <p>If this method is not invoked, by default only a simple
 	 * {@code PathResourceResolver} is used in order to match URL paths to
 	 * resources under the configured locations.
-	 *
 	 * @param cacheResources whether to cache the result of resource resolution;
 	 * setting this to "true" is recommended for production (and "false" for
 	 * development, especially when applying a version strategy
@@ -146,11 +144,12 @@ public class ResourceHandlerRegistration {
 	 */
 	protected ResourceWebHandler getRequestHandler() {
 		ResourceWebHandler handler = new ResourceWebHandler();
+		handler.setLocationValues(this.locationValues);
+		handler.setResourceLoader(this.resourceLoader);
 		if (this.resourceChainRegistration != null) {
 			handler.setResourceResolvers(this.resourceChainRegistration.getResourceResolvers());
 			handler.setResourceTransformers(this.resourceChainRegistration.getResourceTransformers());
 		}
-		handler.setLocations(this.locations);
 		if (this.cacheControl != null) {
 			handler.setCacheControl(this.cacheControl);
 		}

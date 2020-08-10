@@ -1,11 +1,11 @@
 /*
- * Copyright 2002-2017 the original author or authors.
+ * Copyright 2002-2019 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- *      http://www.apache.org/licenses/LICENSE-2.0
+ *      https://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -16,10 +16,12 @@
 
 package org.springframework.web.servlet.mvc.method.annotation;
 
+import java.util.concurrent.CompletionException;
 import java.util.concurrent.CompletionStage;
 import java.util.function.BiFunction;
 
 import org.springframework.core.MethodParameter;
+import org.springframework.lang.Nullable;
 import org.springframework.util.concurrent.ListenableFuture;
 import org.springframework.util.concurrent.ListenableFutureCallback;
 import org.springframework.web.context.request.NativeWebRequest;
@@ -37,17 +39,16 @@ import org.springframework.web.method.support.ModelAndViewContainer;
  */
 public class DeferredResultMethodReturnValueHandler implements HandlerMethodReturnValueHandler {
 
-
 	@Override
 	public boolean supportsReturnType(MethodParameter returnType) {
 		Class<?> type = returnType.getParameterType();
-		return DeferredResult.class.isAssignableFrom(type) ||
+		return (DeferredResult.class.isAssignableFrom(type) ||
 				ListenableFuture.class.isAssignableFrom(type) ||
-				CompletionStage.class.isAssignableFrom(type);
+				CompletionStage.class.isAssignableFrom(type));
 	}
 
 	@Override
-	public void handleReturnValue(Object returnValue, MethodParameter returnType,
+	public void handleReturnValue(@Nullable Object returnValue, MethodParameter returnType,
 			ModelAndViewContainer mavContainer, NativeWebRequest webRequest) throws Exception {
 
 		if (returnValue == null) {
@@ -78,7 +79,7 @@ public class DeferredResultMethodReturnValueHandler implements HandlerMethodRetu
 		DeferredResult<Object> result = new DeferredResult<>();
 		future.addCallback(new ListenableFutureCallback<Object>() {
 			@Override
-			public void onSuccess(Object value) {
+			public void onSuccess(@Nullable Object value) {
 				result.setResult(value);
 			}
 			@Override
@@ -93,6 +94,9 @@ public class DeferredResultMethodReturnValueHandler implements HandlerMethodRetu
 		DeferredResult<Object> result = new DeferredResult<>();
 		future.handle((BiFunction<Object, Throwable, Object>) (value, ex) -> {
 			if (ex != null) {
+				if (ex instanceof CompletionException && ex.getCause() != null) {
+					ex = ex.getCause();
+				}
 				result.setErrorResult(ex);
 			}
 			else {

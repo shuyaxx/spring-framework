@@ -1,11 +1,11 @@
 /*
- * Copyright 2002-2016 the original author or authors.
+ * Copyright 2002-2020 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- *      http://www.apache.org/licenses/LICENSE-2.0
+ *      https://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -16,20 +16,19 @@
 
 package org.springframework.web.reactive.config;
 
-import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.List;
 
 import org.springframework.web.cors.CorsConfiguration;
 
 /**
- * Assists with the creation of a {@link CorsConfiguration} instance mapped to
- * a path pattern. By default all origins, headers, and credentials for
- * {@code GET}, {@code HEAD}, and {@code POST} requests are allowed while the
- * max age is set to 30 minutes.
+ * Assists with the creation of a {@link CorsConfiguration} instance for a given
+ * URL path pattern.
  *
  * @author Sebastien Deleuze
  * @author Rossen Stoyanchev
  * @since 5.0
+ * @see CorsConfiguration
  * @see CorsRegistry
  */
 public class CorsRegistration {
@@ -39,28 +38,33 @@ public class CorsRegistration {
 	private final CorsConfiguration config;
 
 
-	/**
-	 * Create a new {@link CorsRegistration} that allows all origins, headers, and
-	 * credentials for {@code GET}, {@code HEAD}, and {@code POST} requests with
-	 * max age set to 1800 seconds (30 minutes) for the specified path.
-	 *
-	 * @param pathPattern the path that the CORS configuration should apply to;
-	 * exact path mapping URIs (such as {@code "/admin"}) are supported as well
-	 * as Ant-style path patterns (such as {@code "/admin/**"}).
-	 */
 	public CorsRegistration(String pathPattern) {
 		this.pathPattern = pathPattern;
+		// Same implicit default values as the @CrossOrigin annotation + allows simple methods
 		this.config = new CorsConfiguration().applyPermitDefaultValues();
 	}
 
 
 	/**
-	 * Set the origins to allow, e.g. {@code "http://domain1.com"}.
-	 * <p>The special value {@code "*"} allows all domains.
-	 * <p>By default all origins are allowed.
+	 * A list of origins for which cross-origin requests are allowed. Please,
+	 * see {@link CorsConfiguration#setAllowedOrigins(List)} for details.
+	 * <p>By default all origins are allowed unless {@code originPatterns} is
+	 * also set in which case {@code originPatterns} is used instead.
 	 */
 	public CorsRegistration allowedOrigins(String... origins) {
-		this.config.setAllowedOrigins(new ArrayList<>(Arrays.asList(origins)));
+		this.config.setAllowedOrigins(Arrays.asList(origins));
+		return this;
+	}
+
+	/**
+	 * Alternative to {@link #allowCredentials} that supports origins declared
+	 * via wildcard patterns. Please, see
+	 * @link CorsConfiguration#setAllowedOriginPatterns(List)} for details.
+	 * <p>By default this is not set.
+	 * @since 5.3
+	 */
+	public CorsRegistration allowedOriginPatterns(String... patterns) {
+		this.config.setAllowedOriginPatterns(Arrays.asList(patterns));
 		return this;
 	}
 
@@ -71,7 +75,7 @@ public class CorsRegistration {
 	 * are allowed.
 	 */
 	public CorsRegistration allowedMethods(String... methods) {
-		this.config.setAllowedMethods(new ArrayList<>(Arrays.asList(methods)));
+		this.config.setAllowedMethods(Arrays.asList(methods));
 		return this;
 	}
 
@@ -85,7 +89,7 @@ public class CorsRegistration {
 	 * <p>By default all headers are allowed.
 	 */
 	public CorsRegistration allowedHeaders(String... headers) {
-		this.config.setAllowedHeaders(new ArrayList<>(Arrays.asList(headers)));
+		this.config.setAllowedHeaders(Arrays.asList(headers));
 		return this;
 	}
 
@@ -98,7 +102,25 @@ public class CorsRegistration {
 	 * <p>By default this is not set.
 	 */
 	public CorsRegistration exposedHeaders(String... headers) {
-		this.config.setExposedHeaders(new ArrayList<>(Arrays.asList(headers)));
+		this.config.setExposedHeaders(Arrays.asList(headers));
+		return this;
+	}
+
+	/**
+	 * Whether the browser should send credentials, such as cookies along with
+	 * cross domain requests, to the annotated endpoint. The configured value is
+	 * set on the {@code Access-Control-Allow-Credentials} response header of
+	 * preflight requests.
+	 * <p><strong>NOTE:</strong> Be aware that this option establishes a high
+	 * level of trust with the configured domains and also increases the surface
+	 * attack of the web application by exposing sensitive user-specific
+	 * information such as cookies and CSRF tokens.
+	 * <p>By default this is not set in which case the
+	 * {@code Access-Control-Allow-Credentials} header is also not set and
+	 * credentials are therefore not allowed.
+	 */
+	public CorsRegistration allowCredentials(boolean allowCredentials) {
+		this.config.setAllowCredentials(allowCredentials);
 		return this;
 	}
 
@@ -109,16 +131,6 @@ public class CorsRegistration {
 	 */
 	public CorsRegistration maxAge(long maxAge) {
 		this.config.setMaxAge(maxAge);
-		return this;
-	}
-
-	/**
-	 * Whether user credentials are supported.
-	 * <p>By default this is set to {@code true} in which case user credentials
-	 * are supported.
-	 */
-	public CorsRegistration allowCredentials(boolean allowCredentials) {
-		this.config.setAllowCredentials(allowCredentials);
 		return this;
 	}
 

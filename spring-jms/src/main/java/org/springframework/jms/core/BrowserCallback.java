@@ -1,11 +1,11 @@
 /*
- * Copyright 2002-2017 the original author or authors.
+ * Copyright 2002-2018 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- *      http://www.apache.org/licenses/LICENSE-2.0
+ *      https://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -20,6 +20,8 @@ import javax.jms.JMSException;
 import javax.jms.QueueBrowser;
 import javax.jms.Session;
 
+import org.springframework.lang.Nullable;
+
 /**
  * Callback for browsing the messages in a JMS queue.
  *
@@ -29,6 +31,7 @@ import javax.jms.Session;
  *
  * @author Juergen Hoeller
  * @since 2.5.1
+ * @param <T> the result type
  * @see JmsTemplate#browse(BrowserCallback)
  * @see JmsTemplate#browseSelected(String, BrowserCallback)
  */
@@ -44,6 +47,7 @@ public interface BrowserCallback<T> {
 	 * (or {@code null} if none)
 	 * @throws javax.jms.JMSException if thrown by JMS API methods
 	 */
+	@Nullable
 	T doInJms(Session session, QueueBrowser browser) throws JMSException;
 
 }

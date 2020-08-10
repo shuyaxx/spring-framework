@@ -1,11 +1,11 @@
 /*
- * Copyright 2002-2017 the original author or authors.
+ * Copyright 2002-2020 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- *      http://www.apache.org/licenses/LICENSE-2.0
+ *      https://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -31,6 +31,7 @@ import org.eclipse.jetty.websocket.api.extensions.Frame;
 import org.eclipse.jetty.websocket.common.OpCode;
 
 import org.springframework.core.io.buffer.DataBuffer;
+import org.springframework.lang.Nullable;
 import org.springframework.util.Assert;
 import org.springframework.web.reactive.socket.CloseStatus;
 import org.springframework.web.reactive.socket.WebSocketHandler;
@@ -41,7 +42,7 @@ import org.springframework.web.reactive.socket.WebSocketSession;
 /**
  * Jetty {@link WebSocket @WebSocket} handler that delegates events to a
  * reactive {@link WebSocketHandler} and its session.
- * 
+ *
  * @author Violeta Georgieva
  * @author Rossen Stoyanchev
  * @since 5.0
@@ -56,6 +57,7 @@ public class JettyWebSocketHandlerAdapter {
 
 	private final Function<Session, JettyWebSocketSession> sessionFactory;
 
+	@Nullable
 	private JettyWebSocketSession delegateSession;
 
 
@@ -71,8 +73,10 @@ public class JettyWebSocketHandlerAdapter {
 
 	@OnWebSocketConnect
 	public void onWebSocketConnect(Session session) {
-		this.delegateSession = sessionFactory.apply(session);
-		this.delegateHandler.handle(this.delegateSession).subscribe(this.delegateSession);
+		this.delegateSession = this.sessionFactory.apply(session);
+		this.delegateHandler.handle(this.delegateSession)
+				.checkpoint(session.getUpgradeRequest().getRequestURI() + " [JettyWebSocketHandlerAdapter]")
+				.subscribe(this.delegateSession);
 	}
 
 	@OnWebSocketMessage
@@ -88,7 +92,7 @@ public class JettyWebSocketHandlerAdapter {
 		if (this.delegateSession != null) {
 			ByteBuffer buffer = ByteBuffer.wrap(message, offset, length);
 			WebSocketMessage webSocketMessage = toMessage(Type.BINARY, buffer);
-			delegateSession.handleMessage(webSocketMessage.getType(), webSocketMessage);
+			this.delegateSession.handleMessage(webSocketMessage.getType(), webSocketMessage);
 		}
 	}
 
@@ -98,7 +102,7 @@ public class JettyWebSocketHandlerAdapter {
 			if (OpCode.PONG == frame.getOpCode()) {
 				ByteBuffer buffer = (frame.getPayload() != null ? frame.getPayload() : EMPTY_PAYLOAD);
 				WebSocketMessage webSocketMessage = toMessage(Type.PONG, buffer);
-				delegateSession.handleMessage(webSocketMessage.getType(), webSocketMessage);
+				this.delegateSession.handleMessage(webSocketMessage.getType(), webSocketMessage);
 			}
 		}
 	}
@@ -127,7 +131,7 @@ public class JettyWebSocketHandlerAdapter {
 	@OnWebSocketClose
 	public void onWebSocketClose(int statusCode, String reason) {
 		if (this.delegateSession != null) {
-			this.delegateSession.handleClose(new CloseStatus(statusCode, reason));
+			this.delegateSession.handleClose(CloseStatus.create(statusCode, reason));
 		}
 	}
 

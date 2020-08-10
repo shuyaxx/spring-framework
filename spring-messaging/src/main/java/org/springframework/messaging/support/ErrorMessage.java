@@ -5,7 +5,7 @@
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- *      http://www.apache.org/licenses/LICENSE-2.0
+ *      https://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -18,6 +18,7 @@ package org.springframework.messaging.support;
 
 import java.util.Map;
 
+import org.springframework.lang.Nullable;
 import org.springframework.messaging.Message;
 import org.springframework.messaging.MessageHeaders;
 
@@ -44,6 +45,7 @@ public class ErrorMessage extends GenericMessage<Throwable> {
 
 	private static final long serialVersionUID = -5470210965279837728L;
 
+	@Nullable
 	private final Message<?> originalMessage;
 
 
@@ -126,6 +128,7 @@ public class ErrorMessage extends GenericMessage<Throwable> {
 	 * where the ErrorMessage was created.
 	 * @since 5.0
 	 */
+	@Nullable
 	public Message<?> getOriginalMessage() {
 		return this.originalMessage;
 	}
@@ -135,10 +138,7 @@ public class ErrorMessage extends GenericMessage<Throwable> {
 		if (this.originalMessage == null) {
 			return super.toString();
 		}
-
-		StringBuilder sb = new StringBuilder(super.toString());
-		sb.append(" for original ").append(this.originalMessage);
-		return sb.toString();
+		return super.toString() + " for original " + this.originalMessage;
 	}
 
 }

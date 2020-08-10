@@ -5,7 +5,7 @@
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- *      http://www.apache.org/licenses/LICENSE-2.0
+ *      https://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -25,6 +25,7 @@ import java.util.List;
 import java.util.Map;
 
 import org.springframework.http.HttpHeaders;
+import org.springframework.lang.Nullable;
 
 /**
  * A WebSocket session abstraction. Allows sending messages over a WebSocket
@@ -43,6 +44,7 @@ public interface WebSocketSession extends Closeable {
 	/**
 	 * Return the URI used to open the WebSocket connection.
 	 */
+	@Nullable
 	URI getUri();
 
 	/**
@@ -66,16 +68,19 @@ public interface WebSocketSession extends Closeable {
 	 * of the authenticated user.
 	 * <p>If the user has not been authenticated, the method returns <code>null</code>.
 	 */
+	@Nullable
 	Principal getPrincipal();
 
 	/**
 	 * Return the address on which the request was received.
 	 */
+	@Nullable
 	InetSocketAddress getLocalAddress();
 
 	/**
 	 * Return the address of the remote client.
 	 */
+	@Nullable
 	InetSocketAddress getRemoteAddress();
 
 	/**
@@ -83,6 +88,7 @@ public interface WebSocketSession extends Closeable {
 	 * @return the protocol identifier, or {@code null} if no protocol
 	 * was specified or negotiated successfully
 	 */
+	@Nullable
 	String getAcceptedProtocol();
 
 	/**
@@ -114,6 +120,13 @@ public interface WebSocketSession extends Closeable {
 
 	/**
 	 * Send a WebSocket message: either {@link TextMessage} or {@link BinaryMessage}.
+	 *
+	 * <p><strong>Note:</strong> The underlying standard WebSocket session (JSR-356) does
+	 * not allow concurrent sending. Therefore sending must be synchronized. To ensure
+	 * that, one option is to wrap the {@code WebSocketSession} with the
+	 * {@link org.springframework.web.socket.handler.ConcurrentWebSocketSessionDecorator
+	 * ConcurrentWebSocketSessionDecorator}.
+	 * @see org.springframework.web.socket.handler.ConcurrentWebSocketSessionDecorator
 	 */
 	void sendMessage(WebSocketMessage<?> message) throws IOException;
 

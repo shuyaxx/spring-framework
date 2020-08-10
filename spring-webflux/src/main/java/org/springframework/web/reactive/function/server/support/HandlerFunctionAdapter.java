@@ -1,11 +1,11 @@
 /*
- * Copyright 2002-2016 the original author or authors.
+ * Copyright 2002-2018 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- *      http://www.apache.org/licenses/LICENSE-2.0
+ *      https://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -29,7 +29,7 @@ import org.springframework.web.reactive.function.server.ServerRequest;
 import org.springframework.web.server.ServerWebExchange;
 
 /**
- * {@code HandlerAdapter} implementation that supports {@link HandlerFunction}s.
+ * {@code HandlerAdapter} implementation that supports {@link HandlerFunction HandlerFunctions}.
  *
  * @author Arjen Poutsma
  * @since 5.0
@@ -44,9 +44,10 @@ public class HandlerFunctionAdapter implements HandlerAdapter {
 			HANDLER_FUNCTION_RETURN_TYPE = new MethodParameter(method, -1);
 		}
 		catch (NoSuchMethodException ex) {
-			throw new Error(ex);
+			throw new IllegalStateException(ex);
 		}
 	}
+
 
 	@Override
 	public boolean supports(Object handler) {
@@ -56,11 +57,7 @@ public class HandlerFunctionAdapter implements HandlerAdapter {
 	@Override
 	public Mono<HandlerResult> handle(ServerWebExchange exchange, Object handler) {
 		HandlerFunction<?> handlerFunction = (HandlerFunction<?>) handler;
-		ServerRequest request =
-				exchange.<ServerRequest>getAttribute(RouterFunctions.REQUEST_ATTRIBUTE)
-						.orElseThrow(() -> new IllegalStateException(
-								"Could not find ServerRequest in exchange attributes"));
-
+		ServerRequest request = exchange.getRequiredAttribute(RouterFunctions.REQUEST_ATTRIBUTE);
 		return handlerFunction.handle(request)
 				.map(response -> new HandlerResult(handlerFunction, response, HANDLER_FUNCTION_RETURN_TYPE));
 	}

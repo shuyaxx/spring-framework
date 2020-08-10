@@ -1,11 +1,11 @@
 /*
- * Copyright 2002-2016 the original author or authors.
+ * Copyright 2002-2018 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- *      http://www.apache.org/licenses/LICENSE-2.0
+ *      https://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -21,6 +21,7 @@ import java.util.Collections;
 import java.util.Iterator;
 import java.util.LinkedHashSet;
 import java.util.Set;
+
 import javax.management.MBeanServer;
 import javax.management.ObjectName;
 
@@ -31,6 +32,7 @@ import org.springframework.context.ApplicationContext;
 import org.springframework.context.ApplicationContextAware;
 import org.springframework.context.ApplicationContextException;
 import org.springframework.context.ConfigurableApplicationContext;
+import org.springframework.lang.Nullable;
 import org.springframework.util.Assert;
 import org.springframework.util.StringUtils;
 
@@ -51,13 +53,19 @@ import org.springframework.util.StringUtils;
  */
 public class LiveBeansView implements LiveBeansViewMBean, ApplicationContextAware {
 
+	/**
+	 * The "MBean Domain" property name.
+	 */
 	public static final String MBEAN_DOMAIN_PROPERTY_NAME = "spring.liveBeansView.mbeanDomain";
 
+	/**
+	 * The MBean application key.
+	 */
 	public static final String MBEAN_APPLICATION_KEY = "application";
 
-	private static final Set<ConfigurableApplicationContext> applicationContexts =
-			new LinkedHashSet<>();
+	private static final Set<ConfigurableApplicationContext> applicationContexts = new LinkedHashSet<>();
 
+	@Nullable
 	private static String applicationName;
 
 
@@ -87,7 +95,9 @@ public class LiveBeansView implements LiveBeansViewMBean, ApplicationContextAwar
 				try {
 					MBeanServer server = ManagementFactory.getPlatformMBeanServer();
 					String mbeanDomain = applicationContext.getEnvironment().getProperty(MBEAN_DOMAIN_PROPERTY_NAME);
-					server.unregisterMBean(new ObjectName(mbeanDomain, MBEAN_APPLICATION_KEY, applicationName));
+					if (mbeanDomain != null) {
+						server.unregisterMBean(new ObjectName(mbeanDomain, MBEAN_APPLICATION_KEY, applicationName));
+					}
 				}
 				catch (Throwable ex) {
 					throw new ApplicationContextException("Failed to unregister LiveBeansView MBean", ex);
@@ -100,6 +110,7 @@ public class LiveBeansView implements LiveBeansViewMBean, ApplicationContextAwar
 	}
 
 
+	@Nullable
 	private ConfigurableApplicationContext applicationContext;
 
 
@@ -223,6 +234,7 @@ public class LiveBeansView implements LiveBeansViewMBean, ApplicationContextAwar
 	 * @param bd the bean definition to build the resource description for
 	 * @return the JSON-escaped resource description
 	 */
+	@Nullable
 	protected String getEscapedResourceDescription(BeanDefinition bd) {
 		String resourceDescription = bd.getResourceDescription();
 		if (resourceDescription == null) {

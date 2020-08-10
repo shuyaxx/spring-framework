@@ -5,7 +5,7 @@
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- *      http://www.apache.org/licenses/LICENSE-2.0
+ *      https://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -20,6 +20,8 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.Date;
 import java.util.concurrent.ScheduledFuture;
+
+import org.springframework.lang.Nullable;
 
 /**
  * Task scheduler interface that abstracts the scheduling of
@@ -63,6 +65,7 @@ public interface TaskScheduler {
 	 * for internal reasons (e.g. a pool overload handling policy or a pool shutdown in progress)
 	 * @see org.springframework.scheduling.support.CronTrigger
 	 */
+	@Nullable
 	ScheduledFuture<?> schedule(Runnable task, Trigger trigger);
 
 	/**

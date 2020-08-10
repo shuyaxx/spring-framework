@@ -1,11 +1,11 @@
 /*
- * Copyright 2002-2017 the original author or authors.
+ * Copyright 2002-2018 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- *      http://www.apache.org/licenses/LICENSE-2.0
+ *      https://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -16,11 +16,10 @@
 
 package org.springframework.web.reactive.result.method;
 
-import java.util.Optional;
-
 import reactor.core.publisher.Mono;
 
 import org.springframework.core.MethodParameter;
+import org.springframework.lang.Nullable;
 import org.springframework.web.reactive.BindingContext;
 import org.springframework.web.server.ServerWebExchange;
 
@@ -50,9 +49,10 @@ public interface SyncHandlerMethodArgumentResolver extends HandlerMethodArgument
 	 * @param parameter the method parameter
 	 * @param bindingContext the binding context to use
 	 * @param exchange the current exchange
-	 * @return an {@code Optional} with the resolved value, possibly empty
+	 * @return the resolved value, if any
 	 */
-	Optional<Object> resolveArgumentValue(
+	@Nullable
+	Object resolveArgumentValue(
 			MethodParameter parameter, BindingContext bindingContext, ServerWebExchange exchange);
 
 }

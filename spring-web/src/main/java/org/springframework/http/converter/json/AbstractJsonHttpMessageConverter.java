@@ -1,11 +1,11 @@
 /*
- * Copyright 2002-2017 the original author or authors.
+ * Copyright 2002-2018 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- *      http://www.apache.org/licenses/LICENSE-2.0
+ *      https://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -33,6 +33,7 @@ import org.springframework.http.MediaType;
 import org.springframework.http.converter.AbstractGenericHttpMessageConverter;
 import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.http.converter.HttpMessageNotWritableException;
+import org.springframework.lang.Nullable;
 
 /**
  * Common base class for plain JSON converters, e.g. Gson and JSON-B.
@@ -49,8 +50,12 @@ import org.springframework.http.converter.HttpMessageNotWritableException;
  */
 public abstract class AbstractJsonHttpMessageConverter extends AbstractGenericHttpMessageConverter<Object> {
 
+	/**
+	 * The default charset used by the converter.
+	 */
 	public static final Charset DEFAULT_CHARSET = StandardCharsets.UTF_8;
 
+	@Nullable
 	private String jsonPrefix;
 
 
@@ -83,7 +88,7 @@ public abstract class AbstractJsonHttpMessageConverter extends AbstractGenericHt
 
 
 	@Override
-	public final Object read(Type type, Class<?> contextClass, HttpInputMessage inputMessage)
+	public final Object read(Type type, @Nullable Class<?> contextClass, HttpInputMessage inputMessage)
 			throws IOException, HttpMessageNotReadableException {
 
 		return readResolved(GenericTypeResolver.resolveType(type, contextClass), inputMessage);
@@ -104,12 +109,12 @@ public abstract class AbstractJsonHttpMessageConverter extends AbstractGenericHt
 			return readInternal(resolvedType, reader);
 		}
 		catch (Exception ex) {
-			throw new HttpMessageNotReadableException("Could not read JSON: " + ex.getMessage(), ex);
+			throw new HttpMessageNotReadableException("Could not read JSON: " + ex.getMessage(), ex, inputMessage);
 		}
 	}
 
 	@Override
-	protected final void writeInternal(Object o, Type type, HttpOutputMessage outputMessage)
+	protected final void writeInternal(Object o, @Nullable Type type, HttpOutputMessage outputMessage)
 			throws IOException, HttpMessageNotWritableException {
 
 		Writer writer = getWriter(outputMessage);
@@ -122,7 +127,7 @@ public abstract class AbstractJsonHttpMessageConverter extends AbstractGenericHt
 		catch (Exception ex) {
 			throw new HttpMessageNotWritableException("Could not write JSON: " + ex.getMessage(), ex);
 		}
-		writer.close();
+		writer.flush();
 	}
 
 
@@ -142,7 +147,7 @@ public abstract class AbstractJsonHttpMessageConverter extends AbstractGenericHt
 	 * @param writer the {@code} Writer to use
 	 * @throws Exception in case of write failures
 	 */
-	protected abstract void writeInternal(Object o, Type type, Writer writer) throws Exception;
+	protected abstract void writeInternal(Object o, @Nullable Type type, Writer writer) throws Exception;
 
 
 	private static Reader getReader(HttpInputMessage inputMessage) throws IOException {

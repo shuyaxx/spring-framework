@@ -1,11 +1,11 @@
 /*
- * Copyright 2002-2016 the original author or authors.
+ * Copyright 2002-2018 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- *      http://www.apache.org/licenses/LICENSE-2.0
+ *      https://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -19,6 +19,7 @@ package org.springframework.web.reactive.socket.adapter;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
+
 import javax.websocket.CloseReason;
 import javax.websocket.CloseReason.CloseCodes;
 import javax.websocket.SendHandler;
@@ -29,28 +30,28 @@ import reactor.core.publisher.Mono;
 import reactor.core.publisher.MonoProcessor;
 
 import org.springframework.core.io.buffer.DataBufferFactory;
+import org.springframework.lang.Nullable;
 import org.springframework.web.reactive.socket.CloseStatus;
 import org.springframework.web.reactive.socket.HandshakeInfo;
 import org.springframework.web.reactive.socket.WebSocketMessage;
 import org.springframework.web.reactive.socket.WebSocketSession;
 
 /**
- * Spring {@link WebSocketSession} adapter for Tomcat's
+ * Spring {@link WebSocketSession} adapter for a standard Java (JSR 356)
  * {@link javax.websocket.Session}.
- * 
+ *
  * @author Violeta Georgieva
  * @author Rossen Stoyanchev
  * @since 5.0
  */
 public class StandardWebSocketSession extends AbstractListenerWebSocketSession<Session> {
 
-
 	public StandardWebSocketSession(Session session, HandshakeInfo info, DataBufferFactory factory) {
 		this(session, info, factory, null);
 	}
 
 	public StandardWebSocketSession(Session session, HandshakeInfo info, DataBufferFactory factory,
-			MonoProcessor<Void> completionMono) {
+			@Nullable MonoProcessor<Void> completionMono) {
 
 		super(session, session.getId(), info, factory, completionMono);
 	}
@@ -101,8 +102,8 @@ public class StandardWebSocketSession extends AbstractListenerWebSocketSession<S
 			CloseReason.CloseCode code = CloseCodes.getCloseCode(status.getCode());
 			getDelegate().close(new CloseReason(code, status.getReason()));
 		}
-		catch (IOException e) {
-			return Mono.error(e);
+		catch (IOException ex) {
+			return Mono.error(ex);
 		}
 		return Mono.empty();
 	}

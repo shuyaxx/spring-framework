@@ -5,7 +5,7 @@
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- *      http://www.apache.org/licenses/LICENSE-2.0
+ *      https://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -18,12 +18,14 @@ package org.springframework.web.jsf.el;
 
 import java.beans.FeatureDescriptor;
 import java.util.Iterator;
+
 import javax.el.ELContext;
 import javax.el.ELException;
 import javax.el.ELResolver;
 import javax.el.PropertyNotWritableException;
 import javax.faces.context.FacesContext;
 
+import org.springframework.lang.Nullable;
 import org.springframework.web.context.WebApplicationContext;
 import org.springframework.web.jsf.FacesContextUtils;
 
@@ -70,7 +72,8 @@ import org.springframework.web.jsf.FacesContextUtils;
 public class SpringBeanFacesELResolver extends ELResolver {
 
 	@Override
-	public Object getValue(ELContext elContext, Object base, Object property) throws ELException {
+	@Nullable
+	public Object getValue(ELContext elContext, @Nullable Object base, Object property) throws ELException {
 		if (base == null) {
 			String beanName = property.toString();
 			WebApplicationContext wac = getWebApplicationContext(elContext);
@@ -83,7 +86,8 @@ public class SpringBeanFacesELResolver extends ELResolver {
 	}
 
 	@Override
-	public Class<?> getType(ELContext elContext, Object base, Object property) throws ELException {
+	@Nullable
+	public Class<?> getType(ELContext elContext, @Nullable Object base, Object property) throws ELException {
 		if (base == null) {
 			String beanName = property.toString();
 			WebApplicationContext wac = getWebApplicationContext(elContext);
@@ -96,7 +100,7 @@ public class SpringBeanFacesELResolver extends ELResolver {
 	}
 
 	@Override
-	public void setValue(ELContext elContext, Object base, Object property, Object value) throws ELException {
+	public void setValue(ELContext elContext, @Nullable Object base, Object property, Object value) throws ELException {
 		if (base == null) {
 			String beanName = property.toString();
 			WebApplicationContext wac = getWebApplicationContext(elContext);
@@ -114,7 +118,7 @@ public class SpringBeanFacesELResolver extends ELResolver {
 	}
 
 	@Override
-	public boolean isReadOnly(ELContext elContext, Object base, Object property) throws ELException {
+	public boolean isReadOnly(ELContext elContext, @Nullable Object base, Object property) throws ELException {
 		if (base == null) {
 			String beanName = property.toString();
 			WebApplicationContext wac = getWebApplicationContext(elContext);
@@ -126,12 +130,13 @@ public class SpringBeanFacesELResolver extends ELResolver {
 	}
 
 	@Override
-	public Iterator<FeatureDescriptor> getFeatureDescriptors(ELContext elContext, Object base) {
+	@Nullable
+	public Iterator<FeatureDescriptor> getFeatureDescriptors(ELContext elContext, @Nullable Object base) {
 		return null;
 	}
 
 	@Override
-	public Class<?> getCommonPropertyType(ELContext elContext, Object base) {
+	public Class<?> getCommonPropertyType(ELContext elContext, @Nullable Object base) {
 		return Object.class;
 	}
 

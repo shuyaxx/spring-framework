@@ -1,11 +1,11 @@
 /*
- * Copyright 2002-2017 the original author or authors.
+ * Copyright 2002-2020 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- *      http://www.apache.org/licenses/LICENSE-2.0
+ *      https://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -16,14 +16,16 @@
 
 package org.springframework.web.reactive.result.method.annotation;
 
+import java.util.Collections;
 import java.util.Map;
-import java.util.Optional;
 
 import org.springframework.beans.factory.config.ConfigurableBeanFactory;
 import org.springframework.core.MethodParameter;
 import org.springframework.core.ReactiveAdapterRegistry;
 import org.springframework.core.convert.converter.Converter;
+import org.springframework.lang.Nullable;
 import org.springframework.ui.Model;
+import org.springframework.util.Assert;
 import org.springframework.util.StringUtils;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.ValueConstants;
@@ -53,12 +55,15 @@ import org.springframework.web.server.ServerWebExchange;
 public class PathVariableMethodArgumentResolver extends AbstractNamedValueSyncArgumentResolver {
 
 	/**
-	 * @param factory a bean factory to use for resolving  ${...}
-	 * placeholder and #{...} SpEL expressions in default values;
+	 * Create a new {@link PathVariableMethodArgumentResolver}.
+	 * @param factory a bean factory to use for resolving {@code ${...}}
+	 * placeholder and {@code #{...}} SpEL expressions in default values;
 	 * or {@code null} if default values are not expected to contain expressions
 	 * @param registry for checking reactive type wrappers
 	 */
-	public PathVariableMethodArgumentResolver(ConfigurableBeanFactory factory, ReactiveAdapterRegistry registry) {
+	public PathVariableMethodArgumentResolver(@Nullable ConfigurableBeanFactory factory,
+			ReactiveAdapterRegistry registry) {
+
 		super(factory, registry);
 	}
 
@@ -74,27 +79,25 @@ public class PathVariableMethodArgumentResolver extends AbstractNamedValueSyncAr
 
 	@Override
 	protected NamedValueInfo createNamedValueInfo(MethodParameter parameter) {
-		PathVariable annotation = parameter.getParameterAnnotation(PathVariable.class);
-		return new PathVariableNamedValueInfo(annotation);
+		PathVariable ann = parameter.getParameterAnnotation(PathVariable.class);
+		Assert.state(ann != null, "No PathVariable annotation");
+		return new PathVariableNamedValueInfo(ann);
 	}
 
 	@Override
-	@SuppressWarnings("unchecked")
-	protected Optional<Object> resolveNamedValue(String name, MethodParameter parameter, ServerWebExchange exchange) {
+	protected Object resolveNamedValue(String name, MethodParameter parameter, ServerWebExchange exchange) {
 		String attributeName = HandlerMapping.URI_TEMPLATE_VARIABLES_ATTRIBUTE;
-		return exchange.getAttribute(attributeName)
-				.map(value -> ((Map<String, String>) value).get(name));
+		return exchange.getAttributeOrDefault(attributeName, Collections.emptyMap()).get(name);
 	}
 
 	@Override
 	protected void handleMissingValue(String name, MethodParameter parameter) {
-		throw new ServerErrorException(name, parameter);
+		throw new ServerErrorException(name, parameter, null);
 	}
 
 	@Override
-	@SuppressWarnings("unchecked")
 	protected void handleResolvedValue(
-			Object arg, String name, MethodParameter parameter, Model model, ServerWebExchange exchange) {
+			@Nullable Object arg, String name, MethodParameter parameter, Model model, ServerWebExchange exchange) {
 
 		// TODO: View.PATH_VARIABLES ?
 	}

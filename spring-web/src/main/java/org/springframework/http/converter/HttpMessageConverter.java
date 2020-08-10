@@ -1,11 +1,11 @@
 /*
- * Copyright 2002-2017 the original author or authors.
+ * Copyright 2002-2018 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- *      http://www.apache.org/licenses/LICENSE-2.0
+ *      https://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -22,6 +22,7 @@ import java.util.List;
 import org.springframework.http.HttpInputMessage;
 import org.springframework.http.HttpOutputMessage;
 import org.springframework.http.MediaType;
+import org.springframework.lang.Nullable;
 
 /**
  * Strategy interface that specifies a converter that can convert from and to HTTP requests and responses.
@@ -29,6 +30,7 @@ import org.springframework.http.MediaType;
  * @author Arjen Poutsma
  * @author Juergen Hoeller
  * @since 3.0
+ * @param <T> the converted object type
  */
 public interface HttpMessageConverter<T> {
 
@@ -39,7 +41,7 @@ public interface HttpMessageConverter<T> {
 	 * typically the value of a {@code Content-Type} header.
 	 * @return {@code true} if readable; {@code false} otherwise
 	 */
-	boolean canRead(Class<?> clazz, MediaType mediaType);
+	boolean canRead(Class<?> clazz, @Nullable MediaType mediaType);
 
 	/**
 	 * Indicates whether the given class can be written by this converter.
@@ -48,16 +50,16 @@ public interface HttpMessageConverter<T> {
 	 * typically the value of an {@code Accept} header.
 	 * @return {@code true} if writable; {@code false} otherwise
 	 */
-	boolean canWrite(Class<?> clazz, MediaType mediaType);
+	boolean canWrite(Class<?> clazz, @Nullable MediaType mediaType);
 
 	/**
 	 * Return the list of {@link MediaType} objects supported by this converter.
-	 * @return the list of supported media types
+	 * @return the list of supported media types, potentially an immutable copy
 	 */
 	List<MediaType> getSupportedMediaTypes();
 
 	/**
-	 * Read an object of the given type form the given input message, and returns it.
+	 * Read an object of the given type from the given input message, and returns it.
 	 * @param clazz the type of object to return. This type must have previously been passed to the
 	 * {@link #canRead canRead} method of this interface, which must have returned {@code true}.
 	 * @param inputMessage the HTTP input message to read from
@@ -80,7 +82,7 @@ public interface HttpMessageConverter<T> {
 	 * @throws IOException in case of I/O errors
 	 * @throws HttpMessageNotWritableException in case of conversion errors
 	 */
-	void write(T t, MediaType contentType, HttpOutputMessage outputMessage)
+	void write(T t, @Nullable MediaType contentType, HttpOutputMessage outputMessage)
 			throws IOException, HttpMessageNotWritableException;
 
 }

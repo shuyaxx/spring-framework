@@ -1,11 +1,11 @@
 /*
- * Copyright 2002-2017 the original author or authors.
+ * Copyright 2002-2018 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- *      http://www.apache.org/licenses/LICENSE-2.0
+ *      https://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -24,7 +24,7 @@ import org.springframework.beans.factory.BeanFactoryUtils;
 import org.springframework.beans.factory.BeanInitializationException;
 import org.springframework.context.ApplicationContext;
 import org.springframework.core.Ordered;
-import org.springframework.util.Assert;
+import org.springframework.lang.Nullable;
 import org.springframework.util.ObjectUtils;
 import org.springframework.web.reactive.result.view.HttpMessageWriterView;
 import org.springframework.web.reactive.result.view.UrlBasedViewResolver;
@@ -32,6 +32,8 @@ import org.springframework.web.reactive.result.view.View;
 import org.springframework.web.reactive.result.view.ViewResolver;
 import org.springframework.web.reactive.result.view.freemarker.FreeMarkerConfigurer;
 import org.springframework.web.reactive.result.view.freemarker.FreeMarkerViewResolver;
+import org.springframework.web.reactive.result.view.script.ScriptTemplateConfigurer;
+import org.springframework.web.reactive.result.view.script.ScriptTemplateViewResolver;
 
 /**
  * Assist with the configuration of a chain of {@link ViewResolver}'s supporting
@@ -42,21 +44,23 @@ import org.springframework.web.reactive.result.view.freemarker.FreeMarkerViewRes
  * JSON, XML, etc.
  *
  * @author Rossen Stoyanchev
+ * @author Sebastien Deleuze
  * @since 5.0
  */
 public class ViewResolverRegistry {
 
+	@Nullable
 	private final ApplicationContext applicationContext;
 
 	private final List<ViewResolver> viewResolvers = new ArrayList<>(4);
 
 	private final List<View> defaultViews = new ArrayList<>(4);
 
+	@Nullable
 	private Integer order;
 
 
-	public ViewResolverRegistry(ApplicationContext applicationContext) {
-		Assert.notNull(applicationContext, "ApplicationContext must not be null");
+	public ViewResolverRegistry(@Nullable ApplicationContext applicationContext) {
 		this.applicationContext = applicationContext;
 	}
 
@@ -67,7 +71,7 @@ public class ViewResolverRegistry {
 	 * adding a {@link FreeMarkerConfigurer} bean.
 	 */
 	public UrlBasedViewResolverRegistration freeMarker() {
-		if (this.applicationContext != null && !hasBeanOfType(FreeMarkerConfigurer.class)) {
+		if (!checkBeanOfType(FreeMarkerConfigurer.class)) {
 			throw new BeanInitializationException("In addition to a FreeMarker view resolver " +
 					"there must also be a single FreeMarkerConfig bean in this web application context " +
 					"(or its parent): FreeMarkerConfigurer is the usual implementation. " +
@@ -75,14 +79,33 @@ public class ViewResolverRegistry {
 		}
 		FreeMarkerRegistration registration = new FreeMarkerRegistration();
 		UrlBasedViewResolver resolver = registration.getViewResolver();
-		resolver.setApplicationContext(this.applicationContext);
+		if (this.applicationContext != null) {
+			resolver.setApplicationContext(this.applicationContext);
+		}
 		this.viewResolvers.add(resolver);
 		return registration;
 	}
 
-	protected boolean hasBeanOfType(Class<?> beanType) {
-		return !ObjectUtils.isEmpty(BeanFactoryUtils.beanNamesForTypeIncludingAncestors(
-				this.applicationContext, beanType, false, false));
+	/**
+	 * Register a script template view resolver with an empty default view name prefix and suffix.
+	 * <p><strong>Note</strong> that you must also configure script templating by
+	 * adding a {@link ScriptTemplateConfigurer} bean.
+	 * @since 5.0.4
+	 */
+	public UrlBasedViewResolverRegistration scriptTemplate() {
+		if (!checkBeanOfType(ScriptTemplateConfigurer.class)) {
+			throw new BeanInitializationException("In addition to a script template view resolver " +
+					"there must also be a single ScriptTemplateConfig bean in this web application context " +
+					"(or its parent): ScriptTemplateConfigurer is the usual implementation. " +
+					"This bean may be given any name.");
+		}
+		ScriptRegistration registration = new ScriptRegistration();
+		UrlBasedViewResolver resolver = registration.getViewResolver();
+		if (this.applicationContext != null) {
+			resolver.setApplicationContext(this.applicationContext);
+		}
+		this.viewResolvers.add(resolver);
+		return registration;
 	}
 
 	/**
@@ -124,6 +147,13 @@ public class ViewResolverRegistry {
 		this.order = order;
 	}
 
+
+	private boolean checkBeanOfType(Class<?> beanType) {
+		return (this.applicationContext == null ||
+				!ObjectUtils.isEmpty(BeanFactoryUtils.beanNamesForTypeIncludingAncestors(
+						this.applicationContext, beanType, false, false)));
+	}
+
 	protected int getOrder() {
 		return (this.order != null ? this.order : Ordered.LOWEST_PRECEDENCE);
 	}
@@ -142,6 +172,14 @@ public class ViewResolverRegistry {
 		public FreeMarkerRegistration() {
 			super(new FreeMarkerViewResolver());
 			getViewResolver().setSuffix(".ftl");
+		}
+	}
+
+	private static class ScriptRegistration extends UrlBasedViewResolverRegistration {
+
+		public ScriptRegistration() {
+			super(new ScriptTemplateViewResolver());
+			getViewResolver();
 		}
 	}
 

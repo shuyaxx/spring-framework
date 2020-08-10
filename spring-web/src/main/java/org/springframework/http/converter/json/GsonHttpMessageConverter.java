@@ -1,11 +1,11 @@
 /*
- * Copyright 2002-2017 the original author or authors.
+ * Copyright 2002-2018 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- *      http://www.apache.org/licenses/LICENSE-2.0
+ *      https://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -18,10 +18,12 @@ package org.springframework.http.converter.json;
 
 import java.io.Reader;
 import java.io.Writer;
+import java.lang.reflect.ParameterizedType;
 import java.lang.reflect.Type;
 
 import com.google.gson.Gson;
 
+import org.springframework.lang.Nullable;
 import org.springframework.util.Assert;
 
 /**
@@ -33,7 +35,7 @@ import org.springframework.util.Assert;
  * By default, it supports {@code application/json} and {@code application/*+json} with
  * {@code UTF-8} character set.
  *
- * <p>Tested against Gson 2.6; compatible with Gson 2.0 and higher.
+ * <p>Tested against Gson 2.8; compatible with Gson 2.0 and higher.
  *
  * @author Roy Clarkson
  * @author Juergen Hoeller
@@ -51,7 +53,7 @@ public class GsonHttpMessageConverter extends AbstractJsonHttpMessageConverter {
 	 * Construct a new {@code GsonHttpMessageConverter} with default configuration.
 	 */
 	public GsonHttpMessageConverter() {
-		this(new Gson());
+		this.gson = new Gson();
 	}
 
 	/**
@@ -60,7 +62,8 @@ public class GsonHttpMessageConverter extends AbstractJsonHttpMessageConverter {
 	 * @since 5.0
 	 */
 	public GsonHttpMessageConverter(Gson gson) {
-		setGson(gson);
+		Assert.notNull(gson, "A Gson instance is required");
+		this.gson = gson;
 	}
 
 
@@ -90,8 +93,13 @@ public class GsonHttpMessageConverter extends AbstractJsonHttpMessageConverter {
 	}
 
 	@Override
-	protected void writeInternal(Object o, Type type, Writer writer) throws Exception {
-		if (type != null) {
+	protected void writeInternal(Object o, @Nullable Type type, Writer writer) throws Exception {
+		// In Gson, toJson with a type argument will exclusively use that given type,
+		// ignoring the actual type of the object... which might be more specific,
+		// e.g. a subclass of the specified type which includes additional fields.
+		// As a consequence, we're only passing in parameterized type declarations
+		// which might contain extra generics that the object instance doesn't retain.
+		if (type instanceof ParameterizedType) {
 			getGson().toJson(o, type, writer);
 		}
 		else {

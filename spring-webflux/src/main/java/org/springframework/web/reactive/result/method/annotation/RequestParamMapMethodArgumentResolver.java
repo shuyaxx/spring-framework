@@ -1,11 +1,11 @@
 /*
- * Copyright 2002-2017 the original author or authors.
+ * Copyright 2002-2018 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- *      http://www.apache.org/licenses/LICENSE-2.0
+ *      https://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -17,7 +17,6 @@
 package org.springframework.web.reactive.result.method.annotation;
 
 import java.util.Map;
-import java.util.Optional;
 
 import org.springframework.core.MethodParameter;
 import org.springframework.core.ReactiveAdapterRegistry;
@@ -48,7 +47,6 @@ import org.springframework.web.server.ServerWebExchange;
 public class RequestParamMapMethodArgumentResolver extends HandlerMethodArgumentResolverSupport
 		implements SyncHandlerMethodArgumentResolver {
 
-
 	public RequestParamMapMethodArgumentResolver(ReactiveAdapterRegistry adapterRegistry) {
 		super(adapterRegistry);
 	}
@@ -60,18 +58,17 @@ public class RequestParamMapMethodArgumentResolver extends HandlerMethodArgument
 	}
 
 	private boolean allParams(RequestParam requestParam, Class<?> type) {
-		return Map.class.isAssignableFrom(type) && !StringUtils.hasText(requestParam.name());
+		return (Map.class.isAssignableFrom(type) && !StringUtils.hasText(requestParam.name()));
 	}
 
 
 	@Override
-	public Optional<Object> resolveArgumentValue(MethodParameter methodParameter,
-			BindingContext context, ServerWebExchange exchange) {
+	public Object resolveArgumentValue(
+			MethodParameter methodParameter, BindingContext context, ServerWebExchange exchange) {
 
 		boolean isMultiValueMap = MultiValueMap.class.isAssignableFrom(methodParameter.getParameterType());
 		MultiValueMap<String, String> queryParams = exchange.getRequest().getQueryParams();
-		Object value = isMultiValueMap ? queryParams : queryParams.toSingleValueMap();
-		return Optional.of(value);
+		return (isMultiValueMap ? queryParams : queryParams.toSingleValueMap());
 	}
 
 }

@@ -1,11 +1,11 @@
 /*
- * Copyright 2002-2017 the original author or authors.
+ * Copyright 2002-2019 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- *      http://www.apache.org/licenses/LICENSE-2.0
+ *      https://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -16,63 +16,70 @@
 
 package org.springframework.web.reactive.function.server;
 
-import java.util.Locale;
-import java.util.Optional;
+import java.util.List;
 import java.util.function.Consumer;
-import java.util.function.Function;
-import java.util.function.Supplier;
-import java.util.stream.Stream;
 
 import org.springframework.http.codec.HttpMessageReader;
 import org.springframework.http.codec.HttpMessageWriter;
 import org.springframework.http.codec.ServerCodecConfigurer;
 import org.springframework.web.reactive.result.view.ViewResolver;
+import org.springframework.web.server.WebExceptionHandler;
+import org.springframework.web.server.WebFilter;
+import org.springframework.web.server.i18n.LocaleContextResolver;
 
 /**
- * Defines the strategies to be used for processing {@link HandlerFunction}s. An instance of
- * this class is immutable; instances are typically created through the mutable {@link Builder}:
- * either through {@link #builder()} to set up default strategies, or {@link #empty()} to start from
- * scratch.
+ * Defines the strategies to be used for processing {@link HandlerFunction HandlerFunctions}.
+ *
+ * <p>An instance of this class is immutable. Instances are typically created through the
+ * mutable {@link Builder}: either through {@link #builder()} to set up default strategies,
+ * or {@link #empty()} to start from scratch.
  *
  * @author Arjen Poutsma
  * @author Juergen Hoeller
+ * @author Sebastien Deleuze
  * @since 5.0
  * @see RouterFunctions#toHttpHandler(RouterFunction, HandlerStrategies)
- * @see RouterFunctions#toHandlerMapping(RouterFunction, HandlerStrategies)
  */
 public interface HandlerStrategies {
 
-	// Instance methods
+	/**
+	 * Return the {@link HttpMessageReader HttpMessageReaders} to be used for request body conversion.
+	 * @return the message readers
+	 */
+	List<HttpMessageReader<?>> messageReaders();
 
 	/**
-	 * Supply a {@linkplain Stream stream} of {@link HttpMessageReader}s to be used for request
-	 * body conversion.
-	 * @return the stream of message readers
+	 * Return the {@link HttpMessageWriter HttpMessageWriters} to be used for response body conversion.
+	 * @return the message writers
 	 */
-	Supplier<Stream<HttpMessageReader<?>>> messageReaders();
+	List<HttpMessageWriter<?>> messageWriters();
 
 	/**
-	 * Supply a {@linkplain Stream stream} of {@link HttpMessageWriter}s to be used for response
-	 * body conversion.
-	 * @return the stream of message writers
+	 * Return the {@link ViewResolver ViewResolvers} to be used for view name resolution.
+	 * @return the view resolvers
 	 */
-	Supplier<Stream<HttpMessageWriter<?>>> messageWriters();
+	List<ViewResolver> viewResolvers();
 
 	/**
-	 * Supply a {@linkplain Stream stream} of {@link ViewResolver}s to be used for view name
-	 * resolution.
-	 * @return the stream of view resolvers
+	 * Return the {@link WebFilter WebFilters} to be used for filtering the request and response.
+	 * @return the web filters
 	 */
-	Supplier<Stream<ViewResolver>> viewResolvers();
+	List<WebFilter> webFilters();
 
 	/**
-	 * Supply a function that resolves the locale of a given {@link ServerRequest}.
-	 * @return the locale resolver
+	 * Return the {@link WebExceptionHandler WebExceptionHandlers} to be used for handling exceptions.
+	 * @return the exception handlers
 	 */
-	Supplier<Function<ServerRequest, Optional<Locale>>> localeResolver();
+	List<WebExceptionHandler> exceptionHandlers();
+
+	/**
+	 * Return the {@link LocaleContextResolver} to be used for resolving locale context.
+	 * @return the locale context resolver
+	 */
+	LocaleContextResolver localeContextResolver();
 
 
-	// Static methods
+	// Static builder methods
 
 	/**
 	 * Return a new {@code HandlerStrategies} with default initialization.
@@ -81,8 +88,6 @@ public interface HandlerStrategies {
 	static HandlerStrategies withDefaults() {
 		return builder().build();
 	}
-
-	// Builder methods
 
 	/**
 	 * Return a mutable builder for a {@code HandlerStrategies} with default initialization.
@@ -109,20 +114,11 @@ public interface HandlerStrategies {
 	interface Builder {
 
 		/**
-		 * Customize the list of default server-side HTTP message readers and writers.
-		 * @param consumer the consumer to customize the default codecs
+		 * Customize the list of server-side HTTP message readers and writers.
+		 * @param consumer the consumer to customize the codecs
 		 * @return this builder
-		 * @see #customCodecs(Consumer)
 		 */
-		Builder defaultCodecs(Consumer<ServerCodecConfigurer.ServerDefaultCodecsConfigurer> consumer);
-
-		/**
-		 * Customize the list of custom server-side HTTP message readers and writers.
-		 * @param consumer the consumer to customize the custom codecs
-		 * @return this builder
-		 * @see #defaultCodecs(Consumer)
-		 */
-		Builder customCodecs(Consumer<ServerCodecConfigurer.CustomCodecsConfigurer> consumer);
+		Builder codecs(Consumer<ServerCodecConfigurer> consumer);
 
 		/**
 		 * Add the given view resolver to this builder.
@@ -132,11 +128,25 @@ public interface HandlerStrategies {
 		Builder viewResolver(ViewResolver viewResolver);
 
 		/**
-		 * Set the given function as {@link Locale} resolver for this builder.
-		 * @param localeResolver the locale resolver to set
+		 * Add the given web filter to this builder.
+		 * @param filter the filter to add
 		 * @return this builder
 		 */
-		Builder localeResolver(Function<ServerRequest, Optional<Locale>> localeResolver);
+		Builder webFilter(WebFilter filter);
+
+		/**
+		 * Add the given exception handler to this builder.
+		 * @param exceptionHandler the exception handler to add
+		 * @return this builder
+		 */
+		Builder exceptionHandler(WebExceptionHandler exceptionHandler);
+
+		/**
+		 * Add the given locale context resolver to this builder.
+		 * @param localeContextResolver the locale context resolver to add
+		 * @return this builder
+		 */
+		Builder localeContextResolver(LocaleContextResolver localeContextResolver);
 
 		/**
 		 * Builds the {@link HandlerStrategies}.

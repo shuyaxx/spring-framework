@@ -1,11 +1,11 @@
 /*
- * Copyright 2002-2017 the original author or authors.
+ * Copyright 2002-2018 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- *      http://www.apache.org/licenses/LICENSE-2.0
+ *      https://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -30,6 +30,7 @@ import org.apache.commons.logging.LogFactory;
 import org.springframework.core.SpringProperties;
 import org.springframework.core.io.UrlResource;
 import org.springframework.core.io.support.PropertiesLoaderUtils;
+import org.springframework.lang.Nullable;
 import org.springframework.util.ConcurrentReferenceHashMap;
 
 /**
@@ -38,7 +39,7 @@ import org.springframework.util.ConcurrentReferenceHashMap;
  * @author Stephane Nicoll
  * @since 5.0
  */
-public class CandidateComponentsIndexLoader {
+public final class CandidateComponentsIndexLoader {
 
 	/**
 	 * The location to look for components.
@@ -66,6 +67,10 @@ public class CandidateComponentsIndexLoader {
 			new ConcurrentReferenceHashMap<>();
 
 
+	private CandidateComponentsIndexLoader() {
+	}
+
+
 	/**
 	 * Load and instantiate the {@link CandidateComponentsIndex} from
 	 * {@value #COMPONENTS_RESOURCE_LOCATION}, using the given class loader. If no
@@ -75,7 +80,8 @@ public class CandidateComponentsIndexLoader {
 	 * @throws IllegalArgumentException if any module index cannot
 	 * be loaded or if an error occurs while creating {@link CandidateComponentsIndex}
 	 */
-	public static CandidateComponentsIndex loadIndex(ClassLoader classLoader) {
+	@Nullable
+	public static CandidateComponentsIndex loadIndex(@Nullable ClassLoader classLoader) {
 		ClassLoader classLoaderToUse = classLoader;
 		if (classLoaderToUse == null) {
 			classLoaderToUse = CandidateComponentsIndexLoader.class.getClassLoader();
@@ -83,6 +89,7 @@ public class CandidateComponentsIndexLoader {
 		return cache.computeIfAbsent(classLoaderToUse, CandidateComponentsIndexLoader::doLoadIndex);
 	}
 
+	@Nullable
 	private static CandidateComponentsIndex doLoadIndex(ClassLoader classLoader) {
 		if (shouldIgnoreIndex) {
 			return null;

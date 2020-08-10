@@ -1,11 +1,11 @@
 /*
- * Copyright 2002-2017 the original author or authors.
+ * Copyright 2002-2018 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- *      http://www.apache.org/licenses/LICENSE-2.0
+ *      https://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -19,8 +19,13 @@ package org.springframework.web.multipart;
 import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
+import java.nio.file.Files;
+import java.nio.file.Path;
 
 import org.springframework.core.io.InputStreamSource;
+import org.springframework.core.io.Resource;
+import org.springframework.lang.Nullable;
+import org.springframework.util.FileCopyUtils;
 
 /**
  * A representation of an uploaded file received in a multipart request.
@@ -53,6 +58,7 @@ public interface MultipartFile extends InputStreamSource {
 	 * @see org.apache.commons.fileupload.FileItem#getName()
 	 * @see org.springframework.web.multipart.commons.CommonsMultipartFile#setPreserveFilename
 	 */
+	@Nullable
 	String getOriginalFilename();
 
 	/**
@@ -60,6 +66,7 @@ public interface MultipartFile extends InputStreamSource {
 	 * @return the content type, or {@code null} if not defined
 	 * (or no file has been chosen in the multipart form)
 	 */
+	@Nullable
 	String getContentType();
 
 	/**
@@ -91,6 +98,17 @@ public interface MultipartFile extends InputStreamSource {
 	InputStream getInputStream() throws IOException;
 
 	/**
+	 * Return a Resource representation of this MultipartFile. This can be used
+	 * as input to the {@code RestTemplate} or the {@code WebClient} to expose
+	 * content length and the filename along with the InputStream.
+	 * @return this MultipartFile adapted to the Resource contract
+	 * @since 5.1
+	 */
+	default Resource getResource() {
+		return new MultipartFileResource(this);
+	}
+
+	/**
 	 * Transfer the received file to the given destination file.
 	 * <p>This may either move the file in the filesystem, copy the file in the
 	 * filesystem, or save memory-held contents to the destination file. If the
@@ -111,5 +129,16 @@ public interface MultipartFile extends InputStreamSource {
 	 * @see javax.servlet.http.Part#write(String)
 	 */
 	void transferTo(File dest) throws IOException, IllegalStateException;
+
+	/**
+	 * Transfer the received file to the given destination file.
+	 * <p>The default implementation simply copies the file input stream.
+	 * @since 5.1
+	 * @see #getInputStream()
+	 * @see #transferTo(File)
+ 	 */
+	default void transferTo(Path dest) throws IOException, IllegalStateException {
+		FileCopyUtils.copy(getInputStream(), Files.newOutputStream(dest));
+	}
 
 }

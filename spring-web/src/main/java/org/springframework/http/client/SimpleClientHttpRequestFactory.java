@@ -1,11 +1,11 @@
 /*
- * Copyright 2002-2017 the original author or authors.
+ * Copyright 2002-2020 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- *      http://www.apache.org/licenses/LICENSE-2.0
+ *      https://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -25,6 +25,7 @@ import java.net.URLConnection;
 
 import org.springframework.core.task.AsyncListenableTaskExecutor;
 import org.springframework.http.HttpMethod;
+import org.springframework.lang.Nullable;
 import org.springframework.util.Assert;
 
 /**
@@ -42,6 +43,7 @@ public class SimpleClientHttpRequestFactory implements ClientHttpRequestFactory,
 	private static final int DEFAULT_CHUNK_SIZE = 4096;
 
 
+	@Nullable
 	private Proxy proxy;
 
 	private boolean bufferRequestBody = true;
@@ -54,6 +56,7 @@ public class SimpleClientHttpRequestFactory implements ClientHttpRequestFactory,
 
 	private boolean outputStreaming = true;
 
+	@Nullable
 	private AsyncListenableTaskExecutor taskExecutor;
 
 
@@ -180,9 +183,9 @@ public class SimpleClientHttpRequestFactory implements ClientHttpRequestFactory,
 	 * @return the opened connection
 	 * @throws IOException in case of I/O errors
 	 */
-	protected HttpURLConnection openConnection(URL url, Proxy proxy) throws IOException {
+	protected HttpURLConnection openConnection(URL url, @Nullable Proxy proxy) throws IOException {
 		URLConnection urlConnection = (proxy != null ? url.openConnection(proxy) : url.openConnection());
-		if (!HttpURLConnection.class.isInstance(urlConnection)) {
+		if (!(urlConnection instanceof HttpURLConnection)) {
 			throw new IllegalStateException("HttpURLConnection required for [" + url + "] but got: " + urlConnection);
 		}
 		return (HttpURLConnection) urlConnection;

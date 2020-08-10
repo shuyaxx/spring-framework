@@ -1,11 +1,11 @@
 /*
- * Copyright 2002-2017 the original author or authors.
+ * Copyright 2002-2018 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- *      http://www.apache.org/licenses/LICENSE-2.0
+ *      https://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -24,6 +24,8 @@ import java.net.URL;
 import java.nio.channels.Channels;
 import java.nio.channels.ReadableByteChannel;
 
+import org.springframework.lang.Nullable;
+
 /**
  * Interface for a resource descriptor that abstracts from the actual
  * type of underlying resource, such as a file or class path resource.
@@ -41,9 +43,9 @@ import java.nio.channels.ReadableByteChannel;
  * @see WritableResource
  * @see ContextResource
  * @see UrlResource
- * @see ClassPathResource
+ * @see FileUrlResource
  * @see FileSystemResource
- * @see PathResource
+ * @see ClassPathResource
  * @see ByteArrayResource
  * @see InputStreamResource
  */
@@ -58,16 +60,18 @@ public interface Resource extends InputStreamSource {
 	boolean exists();
 
 	/**
-	 * Indicate whether the contents of this resource can be read via
+	 * Indicate whether non-empty contents of this resource can be read via
 	 * {@link #getInputStream()}.
-	 * <p>Will be {@code true} for typical resource descriptors;
-	 * note that actual content reading may still fail when attempted.
+	 * <p>Will be {@code true} for typical resource descriptors that exist
+	 * since it strictly implies {@link #exists()} semantics as of 5.1.
+	 * Note that actual content reading may still fail when attempted.
 	 * However, a value of {@code false} is a definitive indication
 	 * that the resource content cannot be read.
 	 * @see #getInputStream()
+	 * @see #exists()
 	 */
 	default boolean isReadable() {
-		return true;
+		return exists();
 	}
 
 	/**
@@ -159,6 +163,7 @@ public interface Resource extends InputStreamSource {
 	 * <p>Returns {@code null} if this type of resource does not
 	 * have a filename.
 	 */
+	@Nullable
 	String getFilename();
 
 	/**

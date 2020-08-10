@@ -1,11 +1,11 @@
 /*
- * Copyright 2002-2017 the original author or authors.
+ * Copyright 2002-2020 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- *      http://www.apache.org/licenses/LICENSE-2.0
+ *      https://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -17,8 +17,8 @@
 package org.springframework.web.socket.sockjs.transport.session;
 
 import java.io.IOException;
-import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.Date;
 import java.util.HashSet;
 import java.util.List;
@@ -26,11 +26,13 @@ import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ScheduledFuture;
+import java.util.stream.Collectors;
 
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 
 import org.springframework.core.NestedExceptionUtils;
+import org.springframework.lang.Nullable;
 import org.springframework.util.Assert;
 import org.springframework.web.socket.CloseStatus;
 import org.springframework.web.socket.TextMessage;
@@ -57,8 +59,8 @@ public abstract class AbstractSockJsSession implements SockJsSession {
 
 	/**
 	 * Log category to use on network IO exceptions after a client has gone away.
-	 * <p>The Servlet API does not provide notifications when a client disconnects;
-	 * see <a href="https://java.net/jira/browse/SERVLET_SPEC-44">SERVLET_SPEC-44</a>.
+	 * <p>Servlet containers don't expose a client disconnected callback; see
+	 * <a href="https://github.com/eclipse-ee4j/servlet-api/issues/44">eclipse-ee4j/servlet-api#44</a>.
 	 * Therefore network IO failures may occur simply because a client has gone away,
 	 * and that can fill the logs with unnecessary stack traces.
 	 * <p>We make a best effort to identify such network failures, on a per-server
@@ -106,8 +108,10 @@ public abstract class AbstractSockJsSession implements SockJsSession {
 
 	private volatile long timeLastActive = this.timeCreated;
 
+	@Nullable
 	private ScheduledFuture<?> heartbeatFuture;
 
+	@Nullable
 	private HeartbeatTask heartbeatTask;
 
 	private volatile boolean heartbeatDisabled;
@@ -116,16 +120,16 @@ public abstract class AbstractSockJsSession implements SockJsSession {
 	/**
 	 * Create a new instance.
 	 * @param id the session ID
-	 * @param config SockJS service configuration options
+	 * @param config the SockJS service configuration options
 	 * @param handler the recipient of SockJS messages
-	 * @param attributes attributes from the HTTP handshake to associate with the WebSocket
+	 * @param attributes the attributes from the HTTP handshake to associate with the WebSocket
 	 * session; the provided attributes are copied, the original map is not used.
 	 */
 	public AbstractSockJsSession(String id, SockJsServiceConfig config, WebSocketHandler handler,
-			Map<String, Object> attributes) {
+			@Nullable Map<String, Object> attributes) {
 
-		Assert.notNull(id, "SessionId must not be null");
-		Assert.notNull(config, "SockJsConfig must not be null");
+		Assert.notNull(id, "Session id must not be null");
+		Assert.notNull(config, "SockJsServiceConfig must not be null");
 		Assert.notNull(handler, "WebSocketHandler must not be null");
 
 		this.id = id;
@@ -159,6 +163,7 @@ public abstract class AbstractSockJsSession implements SockJsSession {
 
 	// Message sending
 
+	@Override
 	public final void sendMessage(WebSocketMessage<?> message) throws IOException {
 		Assert.state(!isClosed(), "Cannot send a message when session is closed");
 		Assert.isInstanceOf(TextMessage.class, message, "SockJS supports text messages only");
@@ -320,7 +325,7 @@ public abstract class AbstractSockJsSession implements SockJsSession {
 		try {
 			writeFrameInternal(frame);
 		}
-		catch (Throwable ex) {
+		catch (Exception ex) {
 			logWriteFrameFailure(ex);
 			try {
 				// Force disconnect (so we won't try to send close frame)
@@ -358,8 +363,10 @@ public abstract class AbstractSockJsSession implements SockJsSession {
 	}
 
 	private boolean indicatesDisconnectedClient(Throwable ex)  {
-		return ("Broken pipe".equalsIgnoreCase(NestedExceptionUtils.getMostSpecificCause(ex).getMessage()) ||
-				DISCONNECTED_CLIENT_EXCEPTIONS.contains(ex.getClass().getSimpleName()));
+		String message = NestedExceptionUtils.getMostSpecificCause(ex).getMessage();
+		message = (message != null ? message.toLowerCase() : "");
+		String className = ex.getClass().getSimpleName();
+		return (message.contains("broken pipe") || DISCONNECTED_CLIENT_EXCEPTIONS.contains(className));
 	}
 
 
@@ -371,20 +378,45 @@ public abstract class AbstractSockJsSession implements SockJsSession {
 	}
 
 	public void delegateMessages(String... messages) throws SockJsMessageDeliveryException {
-		List<String> undelivered = new ArrayList<>(Arrays.asList(messages));
-		for (String message : messages) {
+		for (int i = 0; i < messages.length; i++) {
 			try {
 				if (isClosed()) {
-					throw new SockJsMessageDeliveryException(this.id, undelivered, "Session closed");
+					logUndeliveredMessages(i, messages);
+					return;
 				}
-				else {
-					this.handler.handleMessage(this, new TextMessage(message));
-					undelivered.remove(0);
+				this.handler.handleMessage(this, new TextMessage(messages[i]));
+			}
+			catch (Exception ex) {
+				if (isClosed()) {
+					if (logger.isTraceEnabled()) {
+						logger.trace("Failed to handle message '" + messages[i] + "'", ex);
+					}
+					logUndeliveredMessages(i, messages);
+					return;
 				}
+				throw new SockJsMessageDeliveryException(this.id, getUndelivered(messages, i), ex);
 			}
-			catch (Throwable ex) {
-				throw new SockJsMessageDeliveryException(this.id, undelivered, ex);
-			}
+		}
+	}
+
+	private void logUndeliveredMessages(int index, String[] messages) {
+		List<String> undelivered = getUndelivered(messages, index);
+		if (logger.isTraceEnabled() && !undelivered.isEmpty()) {
+			logger.trace("Dropped inbound message(s) due to closed session: " + undelivered);
+		}
+	}
+
+	private static List<String> getUndelivered(String[] messages, int i) {
+		switch (messages.length - i) {
+			case 0:
+				return Collections.emptyList();
+			case 1:
+				return (messages[i].trim().isEmpty() ?
+						Collections.emptyList() : Collections.singletonList(messages[i]));
+			default:
+				return Arrays.stream(Arrays.copyOfRange(messages, i, messages.length))
+						.filter(message -> !message.trim().isEmpty())
+						.collect(Collectors.toList());
 		}
 	}
 

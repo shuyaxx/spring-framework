@@ -1,11 +1,11 @@
 /*
- * Copyright 2002-2017 the original author or authors.
+ * Copyright 2002-2018 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- *      http://www.apache.org/licenses/LICENSE-2.0
+ *      https://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -24,6 +24,7 @@ import java.util.List;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.HttpRequest;
+import org.springframework.util.Assert;
 import org.springframework.util.StreamUtils;
 import org.springframework.util.concurrent.ListenableFuture;
 
@@ -49,12 +50,11 @@ class InterceptingAsyncClientHttpRequest extends AbstractBufferingAsyncClientHtt
 
 
 	/**
-	 * Creates new instance of {@link InterceptingAsyncClientHttpRequest}.
-	 *
+	 * Create new instance of {@link InterceptingAsyncClientHttpRequest}.
 	 * @param requestFactory the async request factory
-	 * @param interceptors   the list of interceptors
-	 * @param uri            the request URI
-	 * @param httpMethod     the HTTP method
+	 * @param interceptors the list of interceptors
+	 * @param uri the request URI
+	 * @param httpMethod the HTTP method
 	 */
 	public InterceptingAsyncClientHttpRequest(AsyncClientHttpRequestFactory requestFactory,
 			List<AsyncClientHttpRequestInterceptor> interceptors, URI uri, HttpMethod httpMethod) {
@@ -75,12 +75,17 @@ class InterceptingAsyncClientHttpRequest extends AbstractBufferingAsyncClientHtt
 
 	@Override
 	public HttpMethod getMethod() {
-		return httpMethod;
+		return this.httpMethod;
+	}
+
+	@Override
+	public String getMethodValue() {
+		return this.httpMethod.name();
 	}
 
 	@Override
 	public URI getURI() {
-		return uri;
+		return this.uri;
 	}
 
 
@@ -101,12 +106,13 @@ class InterceptingAsyncClientHttpRequest extends AbstractBufferingAsyncClientHtt
 				return interceptor.intercept(request, body, this);
 			}
 			else {
-				URI theUri = request.getURI();
-				HttpMethod theMethod = request.getMethod();
-				HttpHeaders theHeaders = request.getHeaders();
+				URI uri = request.getURI();
+				HttpMethod method = request.getMethod();
+				HttpHeaders headers = request.getHeaders();
 
-				AsyncClientHttpRequest delegate = requestFactory.createAsyncRequest(theUri, theMethod);
-				delegate.getHeaders().putAll(theHeaders);
+				Assert.state(method != null, "No standard HTTP method");
+				AsyncClientHttpRequest delegate = requestFactory.createAsyncRequest(uri, method);
+				delegate.getHeaders().putAll(headers);
 				if (body.length > 0) {
 					StreamUtils.copy(body, delegate.getBody());
 				}
